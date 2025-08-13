@@ -1,36 +1,19 @@
 "use client";
 
-import React from "react";
-
-import { useRouter, usePathname } from "next/navigation";
+import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
+  Home,
   Package,
   ShoppingCart,
   Users,
   Bell,
   CreditCard,
   FolderTree,
-  Home,
   Settings,
   LogOut,
 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Sidebar,
   SidebarContent,
@@ -47,78 +30,90 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-
-const menuItems = [
-  { title: "Dashboard", icon: Home, href: "/dashboard" },
-  {
-    title: "Quản lý danh mục",
-    icon: FolderTree,
-    href: "/dashboard/categories",
-  },
-  { title: "Quản lý sản phẩm", icon: Package, href: "/dashboard/products" },
-  { title: "Quản lý đơn hàng", icon: ShoppingCart, href: "/dashboard/orders" },
-  { title: "Quản lý khách hàng", icon: Users, href: "/dashboard/customers" },
-  { title: "Thông báo", icon: Bell, href: "/dashboard/notifications" },
-  {
-    title: "Lịch sử thanh toán",
-    icon: CreditCard,
-    href: "/dashboard/payments",
-  },
-];
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { AdminAuthService } from "@/hooks/user/userAuth"; // THÊM IMPORT
 
 interface AdminLayoutProps {
   children: React.ReactNode;
 }
 
+const menuItems = [
+  { title: "Dashboard", icon: Home, id: "dashboard" },
+  { title: "Quản lý danh mục", icon: FolderTree, id: "categories" },
+  { title: "Quản lý sản phẩm", icon: Package, id: "products" },
+  { title: "Quản lý đơn hàng", icon: ShoppingCart, id: "orders" },
+  { title: "Quản lý khách hàng", icon: Users, id: "dashboard/customers" },
+  { title: "Thông báo", icon: Bell, id: "notifications" },
+  { title: "Lịch sử thanh toán", icon: CreditCard, id: "payments" },
+];
+
 export function AdminLayout({ children }: AdminLayoutProps) {
   const router = useRouter();
-  const pathname = usePathname();
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = React.useState(false);
+  const [admin, setAdmin] = React.useState<any>(null); // THAY ĐỔI: Thêm state cho admin
 
-  const handleLogout = () => {
-    localStorage.removeItem("isAuthenticated");
-    localStorage.removeItem("adminUser");
+  // THAY ĐỔI: Lấy thông tin admin từ AdminAuthService
+  React.useEffect(() => {
+    const adminData = AdminAuthService.getAdminInfo();
+    setAdmin(adminData);
+  }, []);
+
+  const handleLogout = async () => {
+  try {
+    const result = await AdminAuthService.logout();
+    
+    if (result.success) {
+      // Redirect to root page (login page)
+      router.push("/");
+      // Hoặc force redirect
+      // window.location.href = "/";
+    }
+  } catch (error) {
+    console.error('Logout failed:', error);
+    // Force redirect anyway
     router.push("/");
-  };
+  }
+};
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-slate-50">
-        <Sidebar variant="inset" className="border-r border-slate-200">
-          <SidebarHeader className="border-b border-slate-200 bg-gradient-to-r from-slate-900 to-slate-800">
-            <div className="flex items-center gap-3 px-4 py-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white p-1">
-                <img
-                  src="images/ChatGPT Image 08_43_04 23 thg 7, 2025.png"
-                  alt="GUNDŌKAI"
-                  className="h-8 w-8 object-contain"
-                />
+      <div className="min-h-screen flex w-full bg-slate-50">
+        <Sidebar className="border-r border-slate-200">
+          <SidebarHeader className="border-b border-slate-200 p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-red-500 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-sm">G</span>
               </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-bold text-white">GUNDŌKAI</span>
-                <span className="truncate text-xs text-slate-300">
-                  Admin Panel
-                </span>
+              <div className="flex flex-col">
+                <span className="font-semibold text-slate-900">GUNDŌKAI</span>
+                <span className="truncate text-xs">Admin Panel</span>
               </div>
             </div>
           </SidebarHeader>
-          <SidebarContent className="bg-white">
+          <SidebarContent>
             <SidebarGroup>
-              <SidebarGroupLabel className="text-slate-600 font-medium">
-                Menu chính
-              </SidebarGroupLabel>
+              <SidebarGroupLabel>Menu chính</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {menuItems.map((item) => (
-                    <SidebarMenuItem key={item.href}>
-                      <SidebarMenuButton
-                        onClick={() => router.push(item.href)}
-                        isActive={pathname === item.href}
-                        className="hover:bg-slate-100 data-[active=true]:bg-slate-900 data-[active=true]:text-white data-[active=true]:font-medium"
-                      >
-                        {React.createElement(item.icon, {
-                          className: "h-4 w-4",
-                        })}
+                    <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton onClick={() => router.push(`/${item.id}`)}>
+                        <item.icon />
                         <span>{item.title}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
@@ -127,19 +122,23 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
-          <SidebarFooter className="border-t border-slate-200 bg-white">
+          <SidebarFooter>
             <SidebarMenu>
               <SidebarMenuItem>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <SidebarMenuButton className="hover:bg-slate-100">
-                      <Avatar className="h-6 w-6 border border-slate-200">
+                    <SidebarMenuButton>
+                      <Avatar className="h-6 w-6">
                         <AvatarImage src="/placeholder.svg?height=24&width=24&text=A" />
-                        <AvatarFallback className="bg-slate-900 text-white text-xs">
-                          A
+                        <AvatarFallback>
+                          {/* THAY ĐỔI: Hiển thị thông tin admin thật */}
+                          {admin?.fullName?.charAt(0) || admin?.email?.charAt(0) || "A"}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="font-medium">Admin</span>
+                      <span className="font-medium">
+                        {/* THAY ĐỔI: Hiển thị tên admin thật */}
+                        {admin?.fullName || admin?.email || "Admin"}
+                      </span>
                     </SidebarMenuButton>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
@@ -168,23 +167,20 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-200 px-4 bg-white shadow-sm">
             <SidebarTrigger className="-ml-1 hover:bg-slate-100" />
             <div className="ml-auto flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                className="border-slate-200 hover:bg-slate-100 bg-transparent"
-              >
+              <Button variant="outline" size="icon" className="border-slate-200">
                 <Bell className="h-4 w-4" />
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="relative h-8 w-8 rounded-full hover:bg-slate-100"
-                  >
-                    <Avatar className="h-8 w-8 border border-slate-200">
-                      <AvatarImage src="/placeholder.svg?height=32&width=32&text=A" />
-                      <AvatarFallback className="bg-slate-900 text-white text-xs">
-                        A
+                  <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage
+                        src="/placeholder.svg?height=32&width=32&text=A"
+                        alt="Avatar"
+                      />
+                      <AvatarFallback className="bg-slate-100">
+                        {/* THAY ĐỔI: Hiển thị thông tin admin thật */}
+                        {admin?.fullName?.charAt(0) || admin?.email?.charAt(0) || "A"}
                       </AvatarFallback>
                     </Avatar>
                   </Button>

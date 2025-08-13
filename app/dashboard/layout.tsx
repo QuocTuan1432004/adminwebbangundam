@@ -1,15 +1,14 @@
-import type React from "react"
-import { AuthGuard } from "@/components/auth-guard"
-import { AdminLayout } from "@/components/admin-layout"
+import { AdminAuthGuard } from "@/components/auth-guard";
+import { AdminLayout } from "@/components/admin-layout";
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+interface DashboardLayoutProps {
+  children: React.ReactNode;
+}
+
+export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
-    <AuthGuard>
+    <AdminAuthGuard>
       <AdminLayout>{children}</AdminLayout>
-    </AuthGuard>
-  )
+    </AdminAuthGuard>
+  );
 }

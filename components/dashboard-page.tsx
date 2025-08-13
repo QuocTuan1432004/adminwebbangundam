@@ -1,4 +1,5 @@
 "use client";
+import { useState, useEffect } from "react";
 import {
   BarChart3,
   ShoppingCart,
@@ -9,13 +10,14 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { userApi } from "@/hooks/user/userApi";
+import { AdminAuthService } from "@/hooks/user/userAuth";
 
-// Mock data
+// Mock data for other stats
 const dashboardStats = {
   totalRevenue: "2,450,000,000",
   totalOrders: 1234,
   totalProducts: 567,
-  totalCustomers: 890,
 };
 
 const orders = [
@@ -76,6 +78,41 @@ const products = [
 ];
 
 export function DashboardPage() {
+  const [totalCustomers, setTotalCustomers] = useState<number>(0);
+  const [loadingCustomers, setLoadingCustomers] = useState(true);
+  const [customerError, setCustomerError] = useState("");
+
+  // Load total customer count from API
+  useEffect(() => {
+    const loadCustomerCount = async () => {
+      try {
+        setLoadingCustomers(true);
+        setCustomerError("");
+        
+        const token = AdminAuthService.getToken();
+        if (!token) {
+          setCustomerError("No authentication token");
+          return;
+        }
+
+        const response = await userApi.getUserCount(token);
+        
+        if (response.result !== undefined) {
+          setTotalCustomers(response.result);
+        } else {
+          setCustomerError("Không thể tải số lượng khách hàng");
+        }
+      } catch (err) {
+        console.error("Error loading customer count:", err);
+        setCustomerError("Lỗi khi tải số lượng khách hàng");
+      } finally {
+        setLoadingCustomers(false);
+      }
+    };
+
+    loadCustomerCount();
+  }, []);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
@@ -179,6 +216,7 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* Updated Customer Count Card with Real Data */}
         <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-600">
@@ -190,16 +228,33 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">
-              {dashboardStats.totalCustomers}
+              {loadingCustomers ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600 mr-2"></div>
+                  Loading...
+                </div>
+              ) : customerError ? (
+                <span className="text-red-500 text-sm">Error</span>
+              ) : (
+                totalCustomers.toLocaleString('vi-VN')
+              )}
             </div>
-            <div className="flex items-center text-xs text-green-600 mt-1">
-              <TrendingUp className="h-3 w-3 mr-1" />
-              +12% so với tháng trước
-            </div>
+            {!loadingCustomers && !customerError && (
+              <div className="flex items-center text-xs text-green-600 mt-1">
+                <TrendingUp className="h-3 w-3 mr-1" />
+                Dữ liệu thực từ API
+              </div>
+            )}
+            {customerError && (
+              <div className="flex items-center text-xs text-red-500 mt-1">
+                {customerError}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
+      {/* Rest of the dashboard remains the same */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="border-b border-slate-100">

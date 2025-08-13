@@ -1,5 +1,5 @@
 import { LoginPageWithAuth } from "@/components/login-page";
 
-export default function Page() {
+export default function LoginPage() {
   return <LoginPageWithAuth />;
 }
