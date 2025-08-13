@@ -54,12 +54,12 @@ interface AdminLayoutProps {
 
 const menuItems = [
   { title: "Dashboard", icon: Home, id: "dashboard" },
-  { title: "Quản lý danh mục", icon: FolderTree, id: "categories" },
-  { title: "Quản lý sản phẩm", icon: Package, id: "products" },
-  { title: "Quản lý đơn hàng", icon: ShoppingCart, id: "orders" },
+  { title: "Quản lý danh mục", icon: FolderTree, id: "dashboard/categories" },
+  { title: "Quản lý sản phẩm", icon: Package, id: "dashboard/products" },
+  { title: "Quản lý đơn hàng", icon: ShoppingCart, id: "dashboard/orders" },
   { title: "Quản lý khách hàng", icon: Users, id: "dashboard/customers" },
-  { title: "Thông báo", icon: Bell, id: "notifications" },
-  { title: "Lịch sử thanh toán", icon: CreditCard, id: "payments" },
+  { title: "Thông báo", icon: Bell, id: "dashboard/notifications" },
+  { title: "Lịch sử thanh toán", icon: CreditCard, id: "dashboard/payments" },
 ];
 
 export function AdminLayout({ children }: AdminLayoutProps) {

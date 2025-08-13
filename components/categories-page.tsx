@@ -22,38 +22,20 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 
-// Mock data
-const parentCategories = [
-  {
-    id: 1,
-    name: "Real Grade (RG)",
-    iconImage: "/placeholder.svg?height=50&width=50&text=RG",
-    image: "/placeholder.svg?height=100&width=100&text=RG",
-  },
-  {
-    id: 2,
-    name: "Master Grade (MG)",
-    iconImage: "/placeholder.svg?height=50&width=50&text=MG",
-    image: "/placeholder.svg?height=100&width=100&text=MG",
-  },
-  {
-    id: 3,
-    name: "Perfect Grade (PG)",
-    iconImage: "/placeholder.svg?height=50&width=50&text=PG",
-    image: "/placeholder.svg?height=100&width=100&text=PG",
-  },
-  {
-    id: 4,
-    name: "High Grade (HG)",
-    iconImage: "/placeholder.svg?height=50&width=50&text=HG",
-    image: "/placeholder.svg?height=100&width=100&text=HG",
-  },
-]
+// Import API functions
+import { 
+  getAllMainCategories, 
+  createMainCategory, 
+  updateMainCategory, 
+  deleteMainCategory,
+  MainCategory 
+} from "@/hooks/category/MainCategory"
 
+// Dữ liệu tạm cho subcategories (chưa có API)
 const subCategories = [
   {
     id: 1,
-    parentId: 1,
+    parentId: "1",
     parentName: "Real Grade (RG)",
     name: "RG Gundam",
     description: "Các mô hình Gundam dòng RG",
@@ -61,31 +43,16 @@ const subCategories = [
   },
   {
     id: 2,
-    parentId: 1,
+    parentId: "1",
     parentName: "Real Grade (RG)",
     name: "RG Zaku",
     description: "Các mô hình Zaku dòng RG",
     image: "/placeholder.svg?height=100&width=100&text=RG-Z",
   },
-  {
-    id: 3,
-    parentId: 2,
-    parentName: "Master Grade (MG)",
-    name: "MG Gundam",
-    description: "Các mô hình Gundam dòng MG",
-    image: "/placeholder.svg?height=100&width=100&text=MG-G",
-  },
-  {
-    id: 4,
-    parentId: 2,
-    parentName: "Master Grade (MG)",
-    name: "MG Strike",
-    description: "Các mô hình Strike dòng MG",
-    image: "/placeholder.svg?height=100&width=100&text=MG-S",
-  },
 ]
 
 export function CategoriesPage() {
+  // States
   const [isAddCategoryOpen, setIsAddCategoryOpen] = React.useState(false)
   const [isAddSubCategoryOpen, setIsAddSubCategoryOpen] = React.useState(false)
   const [isEditCategoryOpen, setIsEditCategoryOpen] = React.useState(false)
@@ -96,6 +63,106 @@ export function CategoriesPage() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = React.useState(false)
   const [deleteType, setDeleteType] = React.useState<string>("")
   const [itemToDelete, setItemToDelete] = React.useState<any>(null)
+  
+  // API data states
+  const [parentCategories, setParentCategories] = React.useState<MainCategory[]>([])
+  const [isLoading, setIsLoading] = React.useState(false)
+  
+  // Form states
+  const [categoryName, setCategoryName] = React.useState("")
+  const [selectedFile, setSelectedFile] = React.useState<File | null>(null)
+  const [editCategoryName, setEditCategoryName] = React.useState("")
+  const [editSelectedFile, setEditSelectedFile] = React.useState<File | null>(null)
+
+  // Load data khi component mount
+  React.useEffect(() => {
+    loadMainCategories()
+  }, [])
+
+  // API Functions
+  const loadMainCategories = async () => {
+    try {
+      setIsLoading(true)
+      const categories = await getAllMainCategories()
+      setParentCategories(categories)
+      console.log("Tải danh mục thành công:", categories)
+    } catch (error) {
+      console.error('Error loading categories:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCreateCategory = async () => {
+    if (!categoryName.trim()) {
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      await createMainCategory({ categoryName }, selectedFile || undefined)
+      
+      console.log("Tạo danh mục thành công")
+      // Reset form và reload data
+      setCategoryName("")
+      setSelectedFile(null)
+      setIsAddCategoryOpen(false)
+      await loadMainCategories()
+    } catch (error) {
+      console.error('Error creating category:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleUpdateCategory = async () => {
+    if (!selectedItem || !editCategoryName.trim()) {
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      await updateMainCategory(
+        selectedItem.id, 
+        { categoryName: editCategoryName }, 
+        editSelectedFile || undefined
+      )
+      
+      console.log("Cập nhật danh mục thành công")
+      
+      // Reset form và reload data
+      setEditCategoryName("")
+      setEditSelectedFile(null)
+      setIsEditCategoryOpen(false)
+      setSelectedItem(null)
+      await loadMainCategories()
+    } catch (error) {
+      console.error('Error updating category:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDeleteCategory = async () => {
+    if (!itemToDelete) return
+
+    try {
+      setIsLoading(true)
+      await deleteMainCategory(itemToDelete.id)
+      
+      console.log("Xóa danh mục thành công")
+      
+      // Reset states và reload data
+      setIsDeleteConfirmOpen(false)
+      setItemToDelete(null)
+      setDeleteType("")
+      await loadMainCategories()
+    } catch (error) {
+      console.error('Error deleting category:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -120,19 +187,31 @@ export function CategoriesPage() {
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="parent-category-name">Tên danh mục cha</Label>
-                  <Input id="parent-category-name" placeholder="VD: Real Grade (RG)" />
+                  <Input 
+                    id="parent-category-name" 
+                    placeholder="VD: Real Grade (RG)" 
+                    value={categoryName}
+                    onChange={(e) => setCategoryName(e.target.value)}
+                  />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="parent-category-icon">Icon danh mục</Label>
-                  <Input id="parent-category-icon" type="file" accept="image/*" />
-                  <p className="text-sm text-muted-foreground">Chọn icon nhỏ cho danh mục (khuyến nghị 50x50px)</p>
+                  <Label htmlFor="parent-category-image">Hình ảnh danh mục</Label>
+                  <Input 
+                    id="parent-category-image" 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  />
+                  <p className="text-sm text-muted-foreground">Chọn hình ảnh cho danh mục</p>
                 </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddCategoryOpen(false)}>
                   Hủy
                 </Button>
-                <Button type="submit">Thêm danh mục cha</Button>
+                <Button type="submit" onClick={handleCreateCategory} disabled={isLoading}>
+                  {isLoading ? "Đang tạo..." : "Thêm danh mục cha"}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -159,7 +238,7 @@ export function CategoriesPage() {
                     <SelectContent>
                       {parentCategories.map((parent) => (
                         <SelectItem key={parent.id} value={parent.id.toString()}>
-                          {parent.name}
+                          {parent.categoryName}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -217,81 +296,88 @@ export function CategoriesPage() {
             <CardTitle>Danh mục cha</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Icon</TableHead>
-                  <TableHead>Hình ảnh</TableHead>
-                  <TableHead>Tên danh mục</TableHead>
-                  <TableHead>Số danh mục con</TableHead>
-                  <TableHead>Số sản phẩm</TableHead>
-                  <TableHead className="text-right">Thao tác</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {parentCategories.map((category) => (
-                  <TableRow key={category.id}>
-                    <TableCell>
-                      <img
-                        src={category.iconImage || "/placeholder.svg"}
-                        alt={`${category.name} icon`}
-                        className="w-8 h-8 rounded object-cover"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <img
-                        src={category.image || "/placeholder.svg"}
-                        alt={category.name}
-                        className="w-12 h-12 rounded object-cover"
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">{category.name}</TableCell>
-                    <TableCell>{subCategories.filter((sub) => sub.parentId === category.id).length}</TableCell>
-                    <TableCell>{Math.floor(Math.random() * 50) + 10}</TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setSelectedItem(category)
-                              setIsViewDetailsOpen(true)
-                            }}
-                          >
-                            <Eye className="mr-2 h-4 w-4" />
-                            Xem chi tiết
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setSelectedItem(category)
-                              setIsEditCategoryOpen(true)
-                            }}
-                          >
-                            <Edit className="mr-2 h-4 w-4" />
-                            Chỉnh sửa
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-red-600"
-                            onClick={() => {
-                              setItemToDelete(category)
-                              setDeleteType("danh mục cha")
-                              setIsDeleteConfirmOpen(true)
-                            }}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Xóa
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+            {isLoading ? (
+              <div className="p-8 text-center">
+                <div className="text-muted-foreground">Đang tải danh mục...</div>
+              </div>
+            ) : parentCategories.length === 0 ? (
+              <div className="p-8 text-center">
+                <div className="text-muted-foreground">Chưa có danh mục nào</div>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Hình ảnh</TableHead>
+                    <TableHead>Tên danh mục</TableHead>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Số danh mục con</TableHead>
+                    <TableHead>Số sản phẩm</TableHead>
+                    <TableHead className="text-right">Thao tác</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {parentCategories.map((category) => (
+                    <TableRow key={category.id}>
+                      <TableCell>
+                        <img
+                          src={category.categoryImg || "/placeholder.svg"}
+                          alt={category.categoryName}
+                          className="w-12 h-12 rounded object-cover"
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{category.categoryName}</TableCell>
+                      <TableCell className="text-muted-foreground">{category.id}</TableCell>
+                      <TableCell>
+                        {subCategories.filter((sub) => sub.parentId === category.id).length}
+                      </TableCell>
+                      <TableCell>0</TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedItem(category)
+                                setIsViewDetailsOpen(true)
+                              }}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              Xem chi tiết
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedItem(category)
+                                setEditCategoryName(category.categoryName)
+                                setIsEditCategoryOpen(true)
+                              }}
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              Chỉnh sửa
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-red-600"
+                              onClick={() => {
+                                setItemToDelete(category)
+                                setDeleteType("danh mục cha")
+                                setIsDeleteConfirmOpen(true)
+                              }}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Xóa
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       )}
@@ -303,86 +389,83 @@ export function CategoriesPage() {
             <CardTitle>Danh mục con</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Hình ảnh</TableHead>
-                  <TableHead>Tên danh mục con</TableHead>
-                  <TableHead>Danh mục cha</TableHead>
-                  <TableHead>Mô tả</TableHead>
-                  <TableHead>Số sản phẩm</TableHead>
-                  <TableHead className="text-right">Thao tác</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {subCategories.map((subCategory) => (
-                  <TableRow key={subCategory.id}>
-                    <TableCell>
-                      <img
-                        src={subCategory.image || "/placeholder.svg"}
-                        alt={subCategory.name}
-                        className="w-12 h-12 rounded object-cover"
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">{subCategory.name}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <img
-                          src={
-                            parentCategories.find((p) => p.id === subCategory.parentId)?.iconImage || "/placeholder.svg"
-                          }
-                          alt="Parent icon"
-                          className="w-6 h-6 rounded object-cover"
-                        />
-                        <Badge variant="outline">{subCategory.parentName}</Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate">{subCategory.description}</TableCell>
-                    <TableCell>{Math.floor(Math.random() * 20) + 1}</TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setSelectedItem(subCategory)
-                              setIsViewDetailsOpen(true)
-                            }}
-                          >
-                            <Eye className="mr-2 h-4 w-4" />
-                            Xem chi tiết
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setSelectedItem(subCategory)
-                              setIsEditSubCategoryOpen(true)
-                            }}
-                          >
-                            <Edit className="mr-2 h-4 w-4" />
-                            Chỉnh sửa
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-red-600"
-                            onClick={() => {
-                              setItemToDelete(subCategory)
-                              setDeleteType("danh mục con")
-                              setIsDeleteConfirmOpen(true)
-                            }}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Xóa
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+            {subCategories.length === 0 ? (
+              <div className="p-8 text-center">
+                <div className="text-muted-foreground">Chưa có danh mục con nào</div>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Hình ảnh</TableHead>
+                    <TableHead>Tên danh mục con</TableHead>
+                    <TableHead>Danh mục cha</TableHead>
+                    <TableHead>Mô tả</TableHead>
+                    <TableHead>Số sản phẩm</TableHead>
+                    <TableHead className="text-right">Thao tác</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {subCategories.map((subCategory) => (
+                    <TableRow key={subCategory.id}>
+                      <TableCell>
+                        <img
+                          src={subCategory.image || "/placeholder.svg"}
+                          alt={subCategory.name}
+                          className="w-12 h-12 rounded object-cover"
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{subCategory.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{subCategory.parentName}</Badge>
+                      </TableCell>
+                      <TableCell className="max-w-xs truncate">{subCategory.description}</TableCell>
+                      <TableCell>0</TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedItem(subCategory)
+                                setIsViewDetailsOpen(true)
+                              }}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              Xem chi tiết
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedItem(subCategory)
+                                setIsEditSubCategoryOpen(true)
+                              }}
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              Chỉnh sửa
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-red-600"
+                              onClick={() => {
+                                setItemToDelete(subCategory)
+                                setDeleteType("danh mục con")
+                                setIsDeleteConfirmOpen(true)
+                              }}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Xóa
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       )}
@@ -397,7 +480,7 @@ export function CategoriesPage() {
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
                 <Label>Tên:</Label>
-                <p className="font-medium">{selectedItem.name}</p>
+                <p className="font-medium">{selectedItem.categoryName || selectedItem.name}</p>
               </div>
               {selectedItem.parentName && (
                 <div className="grid gap-2">
@@ -415,6 +498,16 @@ export function CategoriesPage() {
                 <Label>ID:</Label>
                 <p className="text-muted-foreground">{selectedItem.id}</p>
               </div>
+              {(selectedItem.categoryImg || selectedItem.image) && (
+                <div className="grid gap-2">
+                  <Label>Hình ảnh:</Label>
+                  <img
+                    src={selectedItem.categoryImg || selectedItem.image}
+                    alt={selectedItem.categoryName || selectedItem.name}
+                    className="w-32 h-32 rounded object-cover border"
+                  />
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
@@ -426,7 +519,8 @@ export function CategoriesPage() {
           <DialogHeader>
             <DialogTitle>Xác nhận xóa</DialogTitle>
             <DialogDescription>
-              Bạn có chắc chắn muốn xóa {deleteType} "{itemToDelete?.name}"? Hành động này không thể hoàn tác.
+              Bạn có chắc chắn muốn xóa {deleteType} "{itemToDelete?.categoryName || itemToDelete?.name}"? 
+              Hành động này không thể hoàn tác.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -435,14 +529,10 @@ export function CategoriesPage() {
             </Button>
             <Button
               variant="destructive"
-              onClick={() => {
-                console.log(`Xóa ${deleteType}:`, itemToDelete)
-                setIsDeleteConfirmOpen(false)
-                setItemToDelete(null)
-                setDeleteType("")
-              }}
+              onClick={handleDeleteCategory}
+              disabled={isLoading}
             >
-              Xóa
+              {isLoading ? "Đang xóa..." : "Xóa"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -461,36 +551,25 @@ export function CategoriesPage() {
                 <Label htmlFor="edit-parent-category-name">Tên danh mục cha</Label>
                 <Input
                   id="edit-parent-category-name"
-                  defaultValue={selectedItem.name}
+                  value={editCategoryName}
+                  onChange={(e) => setEditCategoryName(e.target.value)}
                   placeholder="VD: Real Grade (RG)"
                 />
-              </div>
-              <div className="grid gap-2">
-                <Label>Icon danh mục hiện tại</Label>
-                <div className="flex items-center gap-4">
-                  <img
-                    src={selectedItem.iconImage || "/placeholder.svg"}
-                    alt="Current icon"
-                    className="w-16 h-16 rounded object-cover border"
-                  />
-                  <div className="flex-1">
-                    <Input type="file" accept="image/*" />
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Chọn icon mới (khuyến nghị 50x50px) hoặc để trống để giữ icon hiện tại
-                    </p>
-                  </div>
-                </div>
               </div>
               <div className="grid gap-2">
                 <Label>Hình ảnh danh mục hiện tại</Label>
                 <div className="flex items-center gap-4">
                   <img
-                    src={selectedItem.image || "/placeholder.svg"}
+                    src={selectedItem.categoryImg || "/placeholder.svg"}
                     alt="Current image"
                     className="w-20 h-20 rounded object-cover border"
                   />
                   <div className="flex-1">
-                    <Input type="file" accept="image/*" />
+                    <Input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={(e) => setEditSelectedFile(e.target.files?.[0] || null)}
+                    />
                     <p className="text-sm text-muted-foreground mt-1">
                       Chọn hình ảnh mới hoặc để trống để giữ hình ảnh hiện tại
                     </p>
@@ -505,13 +584,10 @@ export function CategoriesPage() {
             </Button>
             <Button
               type="submit"
-              onClick={() => {
-                console.log("Cập nhật danh mục cha:", selectedItem)
-                setIsEditCategoryOpen(false)
-                setSelectedItem(null)
-              }}
+              onClick={handleUpdateCategory}
+              disabled={isLoading}
             >
-              Cập nhật
+              {isLoading ? "Đang cập nhật..." : "Cập nhật"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -535,7 +611,7 @@ export function CategoriesPage() {
                   <SelectContent>
                     {parentCategories.map((parent) => (
                       <SelectItem key={parent.id} value={parent.id.toString()}>
-                        {parent.name}
+                        {parent.categoryName}
                       </SelectItem>
                     ))}
                   </SelectContent>
