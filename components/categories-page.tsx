@@ -31,25 +31,13 @@ import {
   MainCategory 
 } from "@/hooks/category/MainCategory"
 
-// Dữ liệu tạm cho subcategories (chưa có API)
-const subCategories = [
-  {
-    id: 1,
-    parentId: "1",
-    parentName: "Real Grade (RG)",
-    name: "RG Gundam",
-    description: "Các mô hình Gundam dòng RG",
-    image: "/placeholder.svg?height=100&width=100&text=RG-G",
-  },
-  {
-    id: 2,
-    parentId: "1",
-    parentName: "Real Grade (RG)",
-    name: "RG Zaku",
-    description: "Các mô hình Zaku dòng RG",
-    image: "/placeholder.svg?height=100&width=100&text=RG-Z",
-  },
-]
+import {
+  getAllSubCategories,
+  createSubCategory,
+  updateSubCategory,
+  deleteSubCategory,
+  SubCategory
+} from "@/hooks/category/SubCategory"
 
 export function CategoriesPage() {
   // States
@@ -66,28 +54,56 @@ export function CategoriesPage() {
   
   // API data states
   const [parentCategories, setParentCategories] = React.useState<MainCategory[]>([])
+  const [subCategories, setSubCategories] = React.useState<SubCategory[]>([])
   const [isLoading, setIsLoading] = React.useState(false)
   
-  // Form states
+  // Form states cho danh mục cha
   const [categoryName, setCategoryName] = React.useState("")
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null)
   const [editCategoryName, setEditCategoryName] = React.useState("")
   const [editSelectedFile, setEditSelectedFile] = React.useState<File | null>(null)
 
+  // Form states cho danh mục con
+  const [subCategoryName, setSubCategoryName] = React.useState("")
+  const [subCategoryDescription, setSubCategoryDescription] = React.useState("")
+  const [selectedMainCategoryId, setSelectedMainCategoryId] = React.useState("")
+  const [subSelectedFile, setSubSelectedFile] = React.useState<File | null>(null)
+  const [editSubCategoryName, setEditSubCategoryName] = React.useState("")
+  const [editSubCategoryDescription, setEditSubCategoryDescription] = React.useState("")
+  const [editSelectedMainCategoryId, setEditSelectedMainCategoryId] = React.useState("")
+  const [editSubSelectedFile, setEditSubSelectedFile] = React.useState<File | null>(null)
+
+  // Thêm states cho preview ảnh
+  const [categoryImagePreview, setCategoryImagePreview] = React.useState<string | null>(null)
+  const [subCategoryImagePreview, setSubCategoryImagePreview] = React.useState<string | null>(null)
+
   // Load data khi component mount
   React.useEffect(() => {
     loadMainCategories()
+    loadSubCategories()
   }, [])
 
-  // API Functions
+  // API Functions cho Main Category
   const loadMainCategories = async () => {
     try {
       setIsLoading(true)
       const categories = await getAllMainCategories()
       setParentCategories(categories)
-      console.log("Tải danh mục thành công:", categories)
     } catch (error) {
-      console.error('Error loading categories:', error)
+      console.error('Error loading main categories:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // API Functions cho Sub Category
+  const loadSubCategories = async () => {
+    try {
+      setIsLoading(true)
+      const categories = await getAllSubCategories()
+      setSubCategories(categories)
+    } catch (error) {
+      console.error('Error loading sub categories:', error)
     } finally {
       setIsLoading(false)
     }
@@ -95,6 +111,7 @@ export function CategoriesPage() {
 
   const handleCreateCategory = async () => {
     if (!categoryName.trim()) {
+      console.log("Lỗi: Vui lòng nhập tên danh mục")
       return
     }
 
@@ -102,14 +119,42 @@ export function CategoriesPage() {
       setIsLoading(true)
       await createMainCategory({ categoryName }, selectedFile || undefined)
       
-      console.log("Tạo danh mục thành công")
-      // Reset form và reload data
-      setCategoryName("")
-      setSelectedFile(null)
-      setIsAddCategoryOpen(false)
+      console.log("Tạo danh mục cha thành công")
+      
+      // Reset form và preview
+      resetCategoryForm()
       await loadMainCategories()
     } catch (error) {
-      console.error('Error creating category:', error)
+      console.error('Error creating main category:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCreateSubCategory = async () => {
+    if (!subCategoryName.trim() || !subCategoryDescription.trim() || !selectedMainCategoryId || !subSelectedFile) {
+      console.log("Lỗi: Vui lòng điền đầy đủ thông tin và chọn hình ảnh")
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      await createSubCategory(
+        selectedMainCategoryId,
+        { 
+          subCategoryName: subCategoryName, 
+          description: subCategoryDescription 
+        },
+        subSelectedFile
+      )
+      
+      console.log("Tạo danh mục con thành công")
+      
+      // Reset form và preview
+      resetSubCategoryForm()
+      await loadSubCategories()
+    } catch (error) {
+      console.error('Error creating sub category:', error)
     } finally {
       setIsLoading(false)
     }
@@ -117,6 +162,7 @@ export function CategoriesPage() {
 
   const handleUpdateCategory = async () => {
     if (!selectedItem || !editCategoryName.trim()) {
+      console.log("Lỗi: Vui lòng nhập tên danh mục")
       return
     }
 
@@ -128,7 +174,7 @@ export function CategoriesPage() {
         editSelectedFile || undefined
       )
       
-      console.log("Cập nhật danh mục thành công")
+      console.log("Cập nhật danh mục cha thành công")
       
       // Reset form và reload data
       setEditCategoryName("")
@@ -137,7 +183,42 @@ export function CategoriesPage() {
       setSelectedItem(null)
       await loadMainCategories()
     } catch (error) {
-      console.error('Error updating category:', error)
+      console.error('Error updating main category:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleUpdateSubCategory = async () => {
+    if (!selectedItem || !editSubCategoryName.trim() || !editSubCategoryDescription.trim() || !editSelectedMainCategoryId) {
+      console.log("Lỗi: Vui lòng điền đầy đủ thông tin")
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      await updateSubCategory(
+        selectedItem.id,
+        {
+          subCategoryName: editSubCategoryName,
+          description: editSubCategoryDescription,
+          mainCategoryId: editSelectedMainCategoryId
+        },
+        editSubSelectedFile || undefined
+      )
+      
+      console.log("Cập nhật danh mục con thành công")
+      
+      // Reset form và reload data
+      setEditSubCategoryName("")
+      setEditSubCategoryDescription("")
+      setEditSelectedMainCategoryId("")
+      setEditSubSelectedFile(null)
+      setIsEditSubCategoryOpen(false)
+      setSelectedItem(null)
+      await loadSubCategories()
+    } catch (error) {
+      console.error('Error updating sub category:', error)
     } finally {
       setIsLoading(false)
     }
@@ -148,20 +229,111 @@ export function CategoriesPage() {
 
     try {
       setIsLoading(true)
-      await deleteMainCategory(itemToDelete.id)
       
-      console.log("Xóa danh mục thành công")
+      if (deleteType === "danh mục cha") {
+        await deleteMainCategory(itemToDelete.id)
+        await loadMainCategories()
+      } else {
+        await deleteSubCategory(itemToDelete.id)
+        await loadSubCategories()
+      }
       
-      // Reset states và reload data
+      console.log(`Xóa ${deleteType} thành công`)
+      
+      // Reset states
       setIsDeleteConfirmOpen(false)
       setItemToDelete(null)
       setDeleteType("")
-      await loadMainCategories()
     } catch (error) {
-      console.error('Error deleting category:', error)
+      console.error(`Error deleting ${deleteType}:`, error)
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Helper function để lấy tên danh mục cha từ SubCategory object
+  const getMainCategoryNameFromSub = (subCategory: SubCategory) => {
+    return subCategory.mainCategory ? subCategory.mainCategory.categoryName : "Unknown"
+  }
+
+  // Helper function để lấy tên danh mục cha từ ID (cho edit operations)
+  const getMainCategoryName = (mainCategoryId: string) => {
+    const mainCategory = parentCategories.find(cat => cat.id === mainCategoryId)
+    return mainCategory ? mainCategory.categoryName : "Unknown"
+  }
+
+  // Helper function để tạo preview ảnh
+  const createImagePreview = (file: File): string => {
+    return URL.createObjectURL(file)
+  }
+
+  // Cleanup preview URLs khi component unmount
+  React.useEffect(() => {
+    return () => {
+      if (categoryImagePreview) URL.revokeObjectURL(categoryImagePreview)
+      if (subCategoryImagePreview) URL.revokeObjectURL(subCategoryImagePreview)
+    }
+  }, [])
+
+  // Xử lý chọn file cho danh mục cha
+  const handleCategoryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null
+    setSelectedFile(file)
+    
+    // Cleanup preview cũ
+    if (categoryImagePreview) {
+      URL.revokeObjectURL(categoryImagePreview)
+    }
+    
+    // Tạo preview mới
+    if (file) {
+      const previewUrl = createImagePreview(file)
+      setCategoryImagePreview(previewUrl)
+    } else {
+      setCategoryImagePreview(null)
+    }
+  }
+
+  // Xử lý chọn file cho danh mục con
+  const handleSubCategoryFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null
+    setSubSelectedFile(file)
+    
+    // Cleanup preview cũ
+    if (subCategoryImagePreview) {
+      URL.revokeObjectURL(subCategoryImagePreview)
+    }
+    
+    // Tạo preview mới
+    if (file) {
+      const previewUrl = createImagePreview(file)
+      setSubCategoryImagePreview(previewUrl)
+    } else {
+      setSubCategoryImagePreview(null)
+    }
+  }
+
+  // Reset preview khi đóng dialog
+  const resetCategoryForm = () => {
+    setCategoryName("")
+    setSelectedFile(null)
+    if (categoryImagePreview) {
+      URL.revokeObjectURL(categoryImagePreview)
+      setCategoryImagePreview(null)
+    }
+    setIsAddCategoryOpen(false)
+  }
+
+  const resetSubCategoryForm = () => {
+    setSubCategoryName("")
+    setSubCategoryDescription("")
+    setSelectedMainCategoryId("")
+    setSubSelectedFile(null)
+    if (subCategoryImagePreview) {
+      URL.revokeObjectURL(subCategoryImagePreview)
+      setSubCategoryImagePreview(null)
+    }
+    setIsAddSubCategoryOpen(false)
   }
 
   return (
@@ -172,6 +344,7 @@ export function CategoriesPage() {
           <p className="text-muted-foreground">Quản lý danh mục cha và danh mục con</p>
         </div>
         <div className="flex gap-2">
+          {/* Dialog thêm danh mục cha với preview ảnh */}
           <Dialog open={isAddCategoryOpen} onOpenChange={setIsAddCategoryOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => setCategoryType("parent")}>
@@ -200,13 +373,27 @@ export function CategoriesPage() {
                     id="parent-category-image" 
                     type="file" 
                     accept="image/*" 
-                    onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                    onChange={handleCategoryFileChange}
                   />
                   <p className="text-sm text-muted-foreground">Chọn hình ảnh cho danh mục</p>
+                  
+                  {/* Preview ảnh danh mục cha */}
+                  {categoryImagePreview && (
+                    <div className="mt-2">
+                      <Label>Xem trước:</Label>
+                      <div className="mt-1 flex justify-center">
+                        <img
+                          src={categoryImagePreview}
+                          alt="Preview"
+                          className="w-32 h-32 object-cover rounded border-2 border-dashed border-gray-300"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsAddCategoryOpen(false)}>
+                <Button variant="outline" onClick={resetCategoryForm}>
                   Hủy
                 </Button>
                 <Button type="submit" onClick={handleCreateCategory} disabled={isLoading}>
@@ -216,6 +403,7 @@ export function CategoriesPage() {
             </DialogContent>
           </Dialog>
 
+          {/* Dialog thêm danh mục con với preview ảnh */}
           <Dialog open={isAddSubCategoryOpen} onOpenChange={setIsAddSubCategoryOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" onClick={() => setCategoryType("sub")}>
@@ -223,7 +411,7 @@ export function CategoriesPage() {
                 Thêm danh mục con
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Thêm danh mục con mới</DialogTitle>
                 <DialogDescription>Tạo danh mục con thuộc danh mục cha</DialogDescription>
@@ -231,13 +419,13 @@ export function CategoriesPage() {
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
                   <Label htmlFor="parent-select">Danh mục cha</Label>
-                  <Select>
+                  <Select value={selectedMainCategoryId} onValueChange={setSelectedMainCategoryId}>
                     <SelectTrigger>
                       <SelectValue placeholder="Chọn danh mục cha" />
                     </SelectTrigger>
                     <SelectContent>
                       {parentCategories.map((parent) => (
-                        <SelectItem key={parent.id} value={parent.id.toString()}>
+                        <SelectItem key={parent.id} value={parent.id}>
                           {parent.categoryName}
                         </SelectItem>
                       ))}
@@ -246,23 +434,55 @@ export function CategoriesPage() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="sub-category-name">Tên danh mục con</Label>
-                  <Input id="sub-category-name" placeholder="VD: RG Gundam" />
+                  <Input 
+                    id="sub-category-name" 
+                    placeholder="VD: RG Gundam" 
+                    value={subCategoryName}
+                    onChange={(e) => setSubCategoryName(e.target.value)}
+                  />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="sub-category-description">Mô tả</Label>
-                  <Textarea id="sub-category-description" placeholder="Mô tả danh mục con" />
+                  <Textarea 
+                    id="sub-category-description" 
+                    placeholder="Mô tả danh mục con" 
+                    value={subCategoryDescription}
+                    onChange={(e) => setSubCategoryDescription(e.target.value)}
+                    rows={3}
+                  />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="sub-category-image">Hình ảnh danh mục</Label>
-                  <Input id="sub-category-image" type="file" accept="image/*" />
+                  <Input 
+                    id="sub-category-image" 
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleSubCategoryFileChange}
+                  />
                   <p className="text-sm text-muted-foreground">Chọn hình ảnh đại diện cho danh mục con</p>
+                  
+                  {/* Preview ảnh danh mục con */}
+                  {subCategoryImagePreview && (
+                    <div className="mt-2">
+                      <Label>Xem trước:</Label>
+                      <div className="mt-1 flex justify-center">
+                        <img
+                          src={subCategoryImagePreview}
+                          alt="Preview"
+                          className="w-32 h-32 object-cover rounded border-2 border-dashed border-gray-300"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsAddSubCategoryOpen(false)}>
+                <Button variant="outline" onClick={resetSubCategoryForm}>
                   Hủy
                 </Button>
-                <Button type="submit">Thêm danh mục con</Button>
+                <Button type="submit" onClick={handleCreateSubCategory} disabled={isLoading}>
+                  {isLoading ? "Đang tạo..." : "Thêm danh mục con"}
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -329,7 +549,7 @@ export function CategoriesPage() {
                       <TableCell className="font-medium">{category.categoryName}</TableCell>
                       <TableCell className="text-muted-foreground">{category.id}</TableCell>
                       <TableCell>
-                        {subCategories.filter((sub) => sub.parentId === category.id).length}
+                        {subCategories.filter((sub) => sub.mainCategoryId === category.id).length}
                       </TableCell>
                       <TableCell>0</TableCell>
                       <TableCell className="text-right">
@@ -389,7 +609,11 @@ export function CategoriesPage() {
             <CardTitle>Danh mục con</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            {subCategories.length === 0 ? (
+            {isLoading ? (
+              <div className="p-8 text-center">
+                <div className="text-muted-foreground">Đang tải danh mục con...</div>
+              </div>
+            ) : subCategories.length === 0 ? (
               <div className="p-8 text-center">
                 <div className="text-muted-foreground">Chưa có danh mục con nào</div>
               </div>
@@ -410,14 +634,14 @@ export function CategoriesPage() {
                     <TableRow key={subCategory.id}>
                       <TableCell>
                         <img
-                          src={subCategory.image || "/placeholder.svg"}
-                          alt={subCategory.name}
+                          src={subCategory.subCategoryImg || "/placeholder.svg"}
+                          alt={subCategory.subCategoryName}
                           className="w-12 h-12 rounded object-cover"
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{subCategory.name}</TableCell>
+                      <TableCell className="font-medium">{subCategory.subCategoryName}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{subCategory.parentName}</Badge>
+                        <Badge variant="outline">{getMainCategoryNameFromSub(subCategory)}</Badge>
                       </TableCell>
                       <TableCell className="max-w-xs truncate">{subCategory.description}</TableCell>
                       <TableCell>0</TableCell>
@@ -441,6 +665,9 @@ export function CategoriesPage() {
                             <DropdownMenuItem
                               onClick={() => {
                                 setSelectedItem(subCategory)
+                                setEditSubCategoryName(subCategory.subCategoryName)
+                                setEditSubCategoryDescription(subCategory.description)
+                                setEditSelectedMainCategoryId(subCategory.mainCategoryId)
                                 setIsEditSubCategoryOpen(true)
                               }}
                             >
@@ -474,18 +701,18 @@ export function CategoriesPage() {
       <Dialog open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Chi tiết {selectedItem?.parentName ? "danh mục con" : "danh mục cha"}</DialogTitle>
+            <DialogTitle>Chi tiết {selectedItem?.mainCategoryId ? "danh mục con" : "danh mục cha"}</DialogTitle>
           </DialogHeader>
           {selectedItem && (
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
                 <Label>Tên:</Label>
-                <p className="font-medium">{selectedItem.categoryName || selectedItem.name}</p>
+                <p className="font-medium">{selectedItem.categoryName || selectedItem.subCategoryName}</p>
               </div>
-              {selectedItem.parentName && (
+              {selectedItem.mainCategoryId && (
                 <div className="grid gap-2">
                   <Label>Danh mục cha:</Label>
-                  <Badge variant="outline">{selectedItem.parentName}</Badge>
+                  <Badge variant="outline">{selectedItem.mainCategory.categoryName}</Badge>
                 </div>
               )}
               {selectedItem.description && (
@@ -498,12 +725,12 @@ export function CategoriesPage() {
                 <Label>ID:</Label>
                 <p className="text-muted-foreground">{selectedItem.id}</p>
               </div>
-              {(selectedItem.categoryImg || selectedItem.image) && (
+              {(selectedItem.categoryImg || selectedItem.subCategoryImg) && (
                 <div className="grid gap-2">
                   <Label>Hình ảnh:</Label>
                   <img
-                    src={selectedItem.categoryImg || selectedItem.image}
-                    alt={selectedItem.categoryName || selectedItem.name}
+                    src={selectedItem.categoryImg || selectedItem.subCategoryImg}
+                    alt={selectedItem.categoryName || selectedItem.subCategoryName}
                     className="w-32 h-32 rounded object-cover border"
                   />
                 </div>
@@ -519,7 +746,7 @@ export function CategoriesPage() {
           <DialogHeader>
             <DialogTitle>Xác nhận xóa</DialogTitle>
             <DialogDescription>
-              Bạn có chắc chắn muốn xóa {deleteType} "{itemToDelete?.categoryName || itemToDelete?.name}"? 
+              Bạn có chắc chắn muốn xóa {deleteType} "{itemToDelete?.categoryName || itemToDelete?.subCategoryName}"? 
               Hành động này không thể hoàn tác.
             </DialogDescription>
           </DialogHeader>
@@ -604,13 +831,13 @@ export function CategoriesPage() {
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
                 <Label htmlFor="edit-parent-select">Danh mục cha</Label>
-                <Select defaultValue={selectedItem.parentId?.toString()}>
+                <Select value={editSelectedMainCategoryId} onValueChange={setEditSelectedMainCategoryId}>
                   <SelectTrigger>
                     <SelectValue placeholder="Chọn danh mục cha" />
                   </SelectTrigger>
                   <SelectContent>
                     {parentCategories.map((parent) => (
-                      <SelectItem key={parent.id} value={parent.id.toString()}>
+                      <SelectItem key={parent.id} value={parent.id}>
                         {parent.categoryName}
                       </SelectItem>
                     ))}
@@ -619,13 +846,19 @@ export function CategoriesPage() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-sub-category-name">Tên danh mục con</Label>
-                <Input id="edit-sub-category-name" defaultValue={selectedItem.name} placeholder="VD: RG Gundam" />
+                <Input 
+                  id="edit-sub-category-name" 
+                  value={editSubCategoryName}
+                  onChange={(e) => setEditSubCategoryName(e.target.value)}
+                  placeholder="VD: RG Gundam" 
+                />
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-sub-category-description">Mô tả</Label>
                 <Textarea
                   id="edit-sub-category-description"
-                  defaultValue={selectedItem.description}
+                  value={editSubCategoryDescription}
+                  onChange={(e) => setEditSubCategoryDescription(e.target.value)}
                   placeholder="Mô tả danh mục con"
                 />
               </div>
@@ -633,12 +866,16 @@ export function CategoriesPage() {
                 <Label>Hình ảnh danh mục hiện tại</Label>
                 <div className="flex items-center gap-4">
                   <img
-                    src={selectedItem.image || "/placeholder.svg"}
+                    src={selectedItem.subCategoryImg || "/placeholder.svg"}
                     alt="Current image"
                     className="w-20 h-20 rounded object-cover border"
                   />
                   <div className="flex-1">
-                    <Input type="file" accept="image/*" />
+                    <Input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={(e) => setEditSubSelectedFile(e.target.files?.[0] || null)}
+                    />
                     <p className="text-sm text-muted-foreground mt-1">
                       Chọn hình ảnh mới hoặc để trống để giữ hình ảnh hiện tại
                     </p>
@@ -653,13 +890,10 @@ export function CategoriesPage() {
             </Button>
             <Button
               type="submit"
-              onClick={() => {
-                console.log("Cập nhật danh mục con:", selectedItem)
-                setIsEditSubCategoryOpen(false)
-                setSelectedItem(null)
-              }}
+              onClick={handleUpdateSubCategory}
+              disabled={isLoading}
             >
-              Cập nhật
+              {isLoading ? "Đang cập nhật..." : "Cập nhật"}
             </Button>
           </DialogFooter>
         </DialogContent>
