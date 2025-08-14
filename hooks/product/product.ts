@@ -123,12 +123,12 @@ export const updateProduct = async (
   file?: File
 ) => {
   const formData = new FormData();
-  formData.append('productName', data.productName);
-  formData.append('price', data.price.toString());
-  formData.append('description', data.description);
-  formData.append('status', data.status);
-  formData.append('subCategoryId', data.subCategoryId);
-  formData.append('stockQuantity', data.stockQuantity.toString());
+  formData.append('productName', data.productName != null ? data.productName : '');
+  formData.append('price', data.price != null ? data.price.toString() : '');
+  formData.append('description', data.description != null ? data.description : '');
+  formData.append('status', data.status != null ? data.status : '');
+  formData.append('subCategoryId', data.subCategoryId != null ? data.subCategoryId : '');
+  formData.append('stockQuantity', data.stockQuantity != null ? data.stockQuantity.toString() : '');
   if (file) formData.append('file', file);
 
   const response = await authenticatedFetch(`${API_BASE_URL}/product/update/${productId}`, {
