@@ -6,15 +6,30 @@ export interface ApiResponse<T> {
   result?: T;
 }
 
+export interface MainCategoryInfo {
+  id: string;
+  categoryName: string;
+  categoryImg: string;
+}
+
+export interface SubCategoryInfo {
+  id: string;
+  subCategoryName: string;
+  subCategoryImg: string;
+  description: string;
+  mainCategory: MainCategoryInfo;
+}
+
 export interface ProductResponse {
   id: string;
   productName: string;
   price: number;
   description: string;
-  subCategoryId?: string;
   status: string;
   stockQuantity: number;
   thumbnail: string;
+  subcategory: SubCategoryInfo;
+  createdAt?: string;
 }
 
 export interface Product {
@@ -26,6 +41,8 @@ export interface Product {
   status: string;
   stockQuantity: number;
   thumbnail: string;
+  subcategory?: SubCategoryInfo;
+  createdAt?: string;
 }
 
 const handleResponse = async (response: Response) => {
@@ -55,10 +72,12 @@ const mapProductResponseToProduct = (data: ProductResponse): Product => {
     productName: data.productName,
     price: data.price,
     description: data.description,
-    subCategoryId: data.subCategoryId,
+    subCategoryId: data.subcategory?.id,
     status: data.status,
     stockQuantity: data.stockQuantity,
     thumbnail: data.thumbnail,
+    subcategory: data.subcategory,
+    createdAt: data.createdAt,
   };
 };
 
@@ -123,6 +142,17 @@ export const updateProduct = async (
 // Lấy sản phẩm theo subcategory
 export const getProductsBySubCategory = async (subCategoryId: string) => {
   const response = await fetch(`${API_BASE_URL}/product/getProduct/${subCategoryId}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+  const result = await handleResponse(response);
+  return result.result?.map(mapProductResponseToProduct) || [];
+};
+
+export const getAllProducts = async () => {
+  const response = await fetch(`${API_BASE_URL}/product/getAll`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',

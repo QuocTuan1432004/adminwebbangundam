@@ -130,7 +130,7 @@ export const getSubCategoriesByMainCategory = async (mainCategoryId: string) => 
 
 // Lấy tất cả danh mục con
 export const getAllSubCategories = async () => {
-  const response = await authenticatedFetch(`${API_BASE_URL}/subCategory/getAll`, {
+  const response = await fetch(`${API_BASE_URL}/subCategory/getAll`, {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
