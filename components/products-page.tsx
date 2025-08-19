@@ -54,6 +54,10 @@ export function ProductsPage() {
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   
+  // Thêm state cho search
+  const [searchTerm, setSearchTerm] = React.useState("")
+  const [filteredProducts, setFilteredProducts] = React.useState<Product[]>([])
+  
   const [isAddProductOpen, setIsAddProductOpen] = React.useState(false)
   const [isEditProductOpen, setIsEditProductOpen] = React.useState(false)
   const [isViewDetailsOpen, setIsViewDetailsOpen] = React.useState(false)
@@ -145,6 +149,7 @@ export function ProductsPage() {
       setError(null)
       const products = await getAllProducts()
       setProducts(products)
+      setFilteredProducts(products) // Khởi tạo filteredProducts
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Lỗi khi tải sản phẩm')
     } finally {
@@ -740,6 +745,56 @@ export function ProductsPage() {
     )
   }
 
+  // Function để filter sản phẩm
+  const filterProducts = React.useCallback(() => {
+    if (!searchTerm.trim()) {
+      setFilteredProducts(products)
+      return
+    }
+
+    const filtered = products.filter(product => {
+      const searchLower = searchTerm.toLowerCase()
+      
+      // Tìm kiếm theo tên sản phẩm
+      const matchName = product.productName.toLowerCase().includes(searchLower)
+      
+      // Tìm kiếm theo ID
+      const matchId = product.id.toLowerCase().includes(searchLower)
+      
+      // Tìm kiếm theo danh mục
+      const matchCategory = product.subcategory?.subCategoryName.toLowerCase().includes(searchLower) ||
+                           product.subcategory?.mainCategory.categoryName.toLowerCase().includes(searchLower)
+      
+      // Tìm kiếm theo mô tả
+      const matchDescription = product.description?.toLowerCase().includes(searchLower)
+      
+      // Tìm kiếm theo giá (chuyển số thành string)
+      const matchPrice = product.price.toString().includes(searchTerm)
+      
+      // Tìm kiếm theo trạng thái
+      const matchStatus = product.status.toLowerCase().includes(searchLower)
+
+      return matchName || matchId || matchCategory || matchDescription || matchPrice || matchStatus
+    })
+
+    setFilteredProducts(filtered)
+  }, [products, searchTerm])
+
+  // Effect để filter khi searchTerm hoặc products thay đổi
+  React.useEffect(() => {
+    filterProducts()
+  }, [filterProducts])
+
+  // Handle search input change
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value)
+  }
+
+  // Clear search
+  const clearSearch = () => {
+    setSearchTerm("")
+  }
+
   return (
     <div className="space-y-6">
       {error && (
@@ -831,9 +886,9 @@ export function ProductsPage() {
                           <SelectValue placeholder="Chọn trạng thái" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="active">Còn hàng</SelectItem>
-                          <SelectItem value="inactive">Hết hàng</SelectItem>
-                          <SelectItem value="draft">Chuẩn bị nhập hàng</SelectItem>
+                          <SelectItem value="Còn hàng">Còn hàng</SelectItem>
+                          <SelectItem value="Hết hàng">Hết hàng</SelectItem>
+                          <SelectItem value="Chuẩn bị nhập hàng">Chuẩn bị nhập hàng</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1019,15 +1074,37 @@ export function ProductsPage() {
         </div>
       </div>
 
+      {/* Search bar - Cập nhật */}
       <div className="flex items-center space-x-2">
-        <Input placeholder="Tìm kiếm sản phẩm..." className="max-w-sm" />
-        <Button variant="outline" size="icon">
+        <div className="relative flex-1 max-w-sm">
+          <Input 
+            placeholder="Tìm kiếm sản phẩm theo tên, ID, danh mục..." 
+            value={searchTerm}
+            onChange={handleSearchChange}
+            className="pr-10"
+          />
+          {searchTerm && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0 hover:bg-gray-100"
+              onClick={clearSearch}
+              title="Xóa tìm kiếm"
+            >
+              ×
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Search className="h-4 w-4" />
-        </Button>
-        <Button variant="outline">
-          <Filter className="mr-2 h-4 w-4" />
-          Lọc
-        </Button>
+          <span>
+            {searchTerm ? (
+              <>Tìm thấy {filteredProducts.length} / {products.length} sản phẩm</>
+            ) : (
+              <>Hiển thị {products.length} sản phẩm</>
+            )}
+          </span>
+        </div>
       </div>
 
       <Card>
@@ -1048,12 +1125,28 @@ export function ProductsPage() {
                 <TableRow>
                   <TableCell colSpan={6} className="text-center">Đang tải...</TableCell>
                 </TableRow>
-              ) : products.length === 0 ? (
+              ) : filteredProducts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center">Không có sản phẩm nào</TableCell>
+                  <TableCell colSpan={6} className="text-center">
+                    {searchTerm ? (
+                      <div className="py-8">
+                        <p className="text-muted-foreground">Không tìm thấy sản phẩm nào với từ khóa "{searchTerm}"</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          onClick={clearSearch}
+                        >
+                          Xóa bộ lọc
+                        </Button>
+                      </div>
+                    ) : (
+                      "Không có sản phẩm nào"
+                    )}
+                  </TableCell>
                 </TableRow>
               ) : (
-                products.map((product) => (
+                filteredProducts.map((product) => (
                   <TableRow key={product.id}>
                     <TableCell>
                       <div className="flex items-center space-x-3">
@@ -1063,15 +1156,39 @@ export function ProductsPage() {
                           className="w-12 h-12 rounded"
                         />
                         <div>
-                          <p className="font-medium">{product.productName}</p>
+                          <p className="font-medium">
+                            {searchTerm ? (
+                              <span dangerouslySetInnerHTML={{
+                                __html: product.productName.replace(
+                                  new RegExp(searchTerm, 'gi'),
+                                  (match) => `<mark class="bg-yellow-200 px-1 rounded">${match}</mark>`
+                                )
+                              }} />
+                            ) : (
+                              product.productName
+                            )}
+                          </p>
                           <p className="text-sm text-muted-foreground">ID: {product.id}</p>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{getSubCategoryName(product)}</TableCell>
+                    <TableCell>
+                      {searchTerm ? (
+                        <span dangerouslySetInnerHTML={{
+                          __html: getSubCategoryName(product).replace(
+                            new RegExp(searchTerm, 'gi'),
+                            (match) => `<mark class="bg-yellow-200 px-1 rounded">${match}</mark>`
+                          )
+                        }} />
+                      ) : (
+                        getSubCategoryName(product)
+                      )}
+                    </TableCell>
                     <TableCell>{formatCurrency(product.price)}</TableCell>
                     <TableCell>
-                      <span className={product.stockQuantity < 10 ? "text-red-600 font-medium" : ""}>{product.stockQuantity}</span>
+                      <span className={product.stockQuantity < 10 ? "text-red-600 font-medium" : ""}>
+                        {product.stockQuantity}
+                      </span>
                     </TableCell>
                     <TableCell>{getStatusBadge(product.status)}</TableCell>
                     <TableCell className="text-right">
@@ -1388,9 +1505,9 @@ export function ProductsPage() {
                         <SelectValue placeholder="Chọn trạng thái" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="active">Còn hàng</SelectItem>
-                        <SelectItem value="inactive">Hết hàng</SelectItem>
-                        <SelectItem value="draft">Chuẩn bị nhập hàng</SelectItem>
+                        <SelectItem value="Còn hàng">Còn hàng</SelectItem>
+                        <SelectItem value="Hết hàng">Hết hàng</SelectItem>
+                        <SelectItem value="Chuẩn bị nhập hàng">Chuẩn bị nhập hàng</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
