@@ -888,7 +888,7 @@ export function ProductsPage() {
                         <SelectContent>
                           <SelectItem value="Còn hàng">Còn hàng</SelectItem>
                           <SelectItem value="Hết hàng">Hết hàng</SelectItem>
-                          <SelectItem value="Chuẩn bị nhập hàng">Chuẩn bị nhập hàng</SelectItem>
+                          <SelectItem value="Hàng sắp về">Hàng sắp về</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1507,7 +1507,7 @@ export function ProductsPage() {
                       <SelectContent>
                         <SelectItem value="Còn hàng">Còn hàng</SelectItem>
                         <SelectItem value="Hết hàng">Hết hàng</SelectItem>
-                        <SelectItem value="Chuẩn bị nhập hàng">Chuẩn bị nhập hàng</SelectItem>
+                        <SelectItem value="Hàng sắp về">Hàng sắp về</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
