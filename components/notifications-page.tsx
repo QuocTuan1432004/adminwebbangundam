@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { Wifi, WifiOff } from "lucide-react";
 
 import {
   Card,
@@ -38,36 +37,6 @@ interface NotificationItem {
   orderId?: string;
 }
 
-// Mock data ban đầu
-const mockNotifications: NotificationItem[] = [
-  {
-    id: 2,
-    title: "Sản phẩm sắp hết hàng",
-    message: "Sản phẩm RG RX-78-2 sắp hết hàng, chỉ còn 5 sản phẩm",
-    type: "inventory",
-    recipient: "all",
-    recipientName: "Tất cả khách hàng",
-    recipientEmail: "",
-    isRead: true,
-    sentAt: "2024-01-14 15:45",
-    status: "sent",
-    priority: "high",
-  },
-  {
-    id: 3,
-    title: "Khuyến mãi cuối năm",
-    message: "Giảm giá 20% cho tất cả sản phẩm Gundam trong tháng 12",
-    type: "promotion",
-    recipient: "all",
-    recipientName: "Tất cả khách hàng",
-    recipientEmail: "",
-    isRead: false,
-    sentAt: "2024-01-13 09:00",
-    status: "draft",
-    priority: "normal",
-  },
-]
-
 export function NotificationsPage() {
   // State cho notifications
   const [notifications, setNotifications] = React.useState<NotificationItem[]>([]);
@@ -77,12 +46,11 @@ export function NotificationsPage() {
   // WebSocket states
   const [wsConnected, setWsConnected] = React.useState(false);
 
-  // ✅ FIX: WebSocket connection - dùng methods cũ
+  // WebSocket connection
   React.useEffect(() => {
     const connectWebSocket = async () => {
       try {
         console.log('🚀 Notifications: Connecting to WebSocket...');
-        // ✅ Sử dụng connect() thay vì connectWithRef()
         await webSocketService.connect();
         setWsConnected(true);
         console.log('✅ Notifications: WebSocket connected successfully');
@@ -100,7 +68,7 @@ export function NotificationsPage() {
       console.log(`🔄 Notifications: WebSocket status changed to ${connected ? 'Connected' : 'Disconnected'}`);
     });
 
-    // ✅ FIX: Cleanup - dùng disconnect() thay vì disconnectWithRef()
+    // Cleanup
     return () => {
       unsubscribeStatus();
       webSocketService.disconnect();
@@ -181,7 +149,8 @@ export function NotificationsPage() {
         const token = AdminAuthService.getToken();
         if (!token) {
           setError("Không có token xác thực");
-          setNotifications(mockNotifications);
+          setNotifications([]);
+          setLoading(false);
           return;
         }
 
@@ -195,20 +164,20 @@ export function NotificationsPage() {
             convertPaymentLogToNotification(order, index)
           );
           
-          const allNotifications = [...paymentNotifications, ...mockNotifications];
-          allNotifications.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
+          // ✅ Chỉ dùng real data từ API
+          paymentNotifications.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
           
-          setNotifications(allNotifications);
-          console.log("🎯 Final notifications:", allNotifications.length);
+          setNotifications(paymentNotifications);
+          console.log("🎯 Final notifications:", paymentNotifications.length);
         } else {
           console.log("⚠️ No confirmed payments found");
-          setNotifications(mockNotifications);
-          setError("Chưa có thanh toán nào được xác nhận");
+          setNotifications([]); // ✅ Không có data thì để trống
+          // ❌ Không set error nữa, để trống thay vì hiển thị lỗi
         }
       } catch (err) {
         console.error("❌ API Error:", err);
-        setError(`Lỗi API: ${err.message}`);
-        setNotifications(mockNotifications);
+        setError(`Lỗi kết nối API: ${err.message}`);
+        setNotifications([]);
       } finally {
         setLoading(false);
       }
@@ -290,72 +259,64 @@ export function NotificationsPage() {
           <h2 className="text-3xl font-bold tracking-tight">Quản lý thông báo</h2>
           <p className="text-muted-foreground">Gửi và theo dõi thông báo đến khách hàng</p>
         </div>
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100">
-          {wsConnected ? (
-            <>
-              <Wifi className="h-4 w-4 text-green-600" />
-              <span className="text-sm text-green-600 font-medium">Real-time</span>
-            </>
-          ) : (
-            <>
-              <WifiOff className="h-4 w-4 text-red-600" />
-              <span className="text-sm text-red-600 font-medium">Offline</span>
-            </>
-          )}
-        </div>
       </div>
 
-      {/* Error display */}
+      {/* Error display - chỉ hiển thị lỗi API thực sự */}
       {error && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <p className="text-yellow-600 text-sm">⚠️ {error}</p>
-          <p className="text-yellow-500 text-xs mt-1">
-            API Endpoint: GET /payment-logs/filter?method=all&status=CONFIRMED - Hiển thị dữ liệu mẫu
-          </p>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-600 text-sm">❌ {error}</p>
         </div>
       )}
 
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tiêu đề</TableHead>
-                <TableHead>Loại</TableHead>
-                <TableHead>Người nhận</TableHead>
-                <TableHead>Độ ưu tiên</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead>Thời gian gửi</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {notifications.map((notification) => (
-                <TableRow key={notification.id}>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      {!notification.isRead && notification.status === "sent" && (
-                        <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                      )}
-                      <div>
-                        <p className="font-medium">{notification.title}</p>
-                        <p className="text-sm text-muted-foreground truncate max-w-xs">{notification.message}</p>
-                        {notification.orderId && (
-                          <p className="text-xs text-blue-600">#{notification.orderId}</p>
-                        )}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{getTypeBadge(notification.type)}</TableCell>
-                  <TableCell>
-                    <span className="text-sm">{notification.recipientName}</span>
-                  </TableCell>
-                  <TableCell>{getPriorityBadge(notification.priority)}</TableCell>
-                  <TableCell>{getStatusBadge(notification.status)}</TableCell>
-                  <TableCell>{notification.sentAt}</TableCell>
+          {/* ✅ Hiển thị empty state nếu không có notifications */}
+          {notifications.length === 0 && !loading ? (
+            <div className="p-8 text-center">
+              <p className="text-muted-foreground">Chưa có thông báo thanh toán nào</p>
+              <p className="text-xs text-muted-foreground mt-2">Thông báo sẽ xuất hiện khi có đơn hàng được thanh toán thành công</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tiêu đề</TableHead>
+                  <TableHead>Loại</TableHead>
+                  <TableHead>Người nhận</TableHead>
+                  <TableHead>Độ ưu tiên</TableHead>
+                  <TableHead>Trạng thái</TableHead>
+                  <TableHead>Thời gian gửi</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {notifications.map((notification) => (
+                  <TableRow key={notification.id}>
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        {!notification.isRead && notification.status === "sent" && (
+                          <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                        )}
+                        <div>
+                          <p className="font-medium">{notification.title}</p>
+                          <p className="text-sm text-muted-foreground truncate max-w-xs">{notification.message}</p>
+                          {notification.orderId && (
+                            <p className="text-xs text-blue-600">#{notification.orderId}</p>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{getTypeBadge(notification.type)}</TableCell>
+                    <TableCell>
+                      <span className="text-sm">{notification.recipientName}</span>
+                    </TableCell>
+                    <TableCell>{getPriorityBadge(notification.priority)}</TableCell>
+                    <TableCell>{getStatusBadge(notification.status)}</TableCell>
+                    <TableCell>{notification.sentAt}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>
