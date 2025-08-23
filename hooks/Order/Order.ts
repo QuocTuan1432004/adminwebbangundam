@@ -184,3 +184,143 @@ export const getOrderById = async (orderId: string) => {
   const result = await handleResponse(response);
   return mapOrderResponseToOrder(result.result);
 };
+
+// Thêm interface cho PaymentLogResponse
+export interface PaymentLogResponse {
+  id: string;
+  orderId: string;
+  method: string; // COD, VNPay
+  status: string; // CONFIRMED, FAILED, PENDING
+  amount: number;
+  transactionId?: string;
+  paidAt?: string;
+  createdAt: string;
+  customerName?: string;
+  customerEmail?: string;
+}
+
+// Interface cho order notification data
+export interface OrderNotificationData {
+  orderId: string;
+  customerName: string;
+  customerEmail: string;
+  totalAmount: number;
+  paymentStatus: string;
+  createdAt: string;
+  paidAt?: string;
+  method: string;
+  transactionId?: string;
+}
+
+// Thêm vào orderApi object
+export const orderApi = {
+  // ...existing methods...
+
+  // Lấy payment logs đã thanh toán thành công cho notifications
+  getPaidOrdersForNotifications: async (token: string): Promise<ApiResponse<OrderNotificationData[]>> => {
+    try {
+      // Gọi API PaymentLogController để lấy các payment đã CONFIRMED
+      const response = await fetch(`${API_BASE_URL}/payment-logs/filter?method=all&status=CONFIRMED&page=0&size=50`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const paymentLogsPage = await response.json();
+      
+      // Chuyển đổi PaymentLogResponse thành OrderNotificationData
+      const orderNotifications: OrderNotificationData[] = paymentLogsPage.content.map((paymentLog: PaymentLogResponse) => ({
+        orderId: paymentLog.orderId,
+        customerName: paymentLog.customerName || "Khách hàng",
+        customerEmail: paymentLog.customerEmail || "",
+        totalAmount: paymentLog.amount,
+        paymentStatus: paymentLog.status,
+        createdAt: paymentLog.createdAt,
+        paidAt: paymentLog.paidAt,
+        method: paymentLog.method,
+        transactionId: paymentLog.transactionId,
+      }));
+
+      // Trả về format ApiResponse để consistent với các API khác
+      return {
+        code: 200,
+        message: "Success",
+        result: orderNotifications
+      };
+      
+    } catch (error) {
+      console.error('Get paid orders for notifications API error:', error);
+      throw error;
+    }
+  },
+
+  // Lấy tất cả payment logs (có thể dùng cho các mục đích khác)
+  getAllPaymentLogs: async (token: string, method: string = "all", page: number = 0, size: number = 10): Promise<ApiResponse<any>> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/payment-logs?method=${method}&page=${page}&size=${size}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      return {
+        code: 200,
+        message: "Success",
+        result: result
+      };
+      
+    } catch (error) {
+      console.error('Get all payment logs API error:', error);
+      throw error;
+    }
+  },
+
+  // Lấy payment logs theo method và status
+  getPaymentLogsByMethodAndStatus: async (
+    token: string, 
+    method: string = "all", 
+    status: string, 
+    page: number = 0, 
+    size: number = 10
+  ): Promise<ApiResponse<any>> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/payment-logs/filter?method=${method}&status=${status}&page=${page}&size=${size}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      return {
+        code: 200,
+        message: "Success",
+        result: result
+      };
+      
+    } catch (error) {
+      console.error('Get payment logs by method and status API error:', error);
+      throw error;
+    }
+  },
+};

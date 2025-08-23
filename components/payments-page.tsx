@@ -1,16 +1,35 @@
 "use client";
 
 import * as React from "react";
-import { Eye, MoreHorizontal, Download, Trash2 } from "lucide-react";
 import {
-  getPaymentLogs,
-  getPaymentLogsByStatus,
-} from "@/hooks/Payment/Payment";
+  MoreHorizontal,
+  Download,
+  Eye,
+  CheckCircle,
+  XCircle,
+  CreditCard,
+  Smartphone,
+  Banknote,
+  Clock,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -19,19 +38,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -39,6 +55,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+// Import các function payment và WebSocket
+import {
+  getPaymentLogs,
+  getPaymentLogsByStatus,
+  markOrderAsPaid,
+  markOrderAsFailed,
+} from "@/hooks/Payment/Payment";
+import { webSocketService } from "@/lib/websocket";
 
 // Mock data
 const paymentLogs = [
@@ -102,6 +127,34 @@ export function PaymentsPage() {
   const [totalPages, setTotalPages] = React.useState(0); // Tổng số trang
   const [pageSize] = React.useState(10); // Số lượng bản ghi trên mỗi trang
 
+  // WebSocket states
+  const [wsConnected, setWsConnected] = React.useState(false);
+  const [processingPayments, setProcessingPayments] = React.useState<Set<string>>(
+    new Set()
+  );
+
+  // WebSocket connection
+  React.useEffect(() => {
+    const connectWebSocket = async () => {
+      try {
+        await webSocketService.connect();
+        setWsConnected(true);
+        console.log("WebSocket connected successfully");
+      } catch (error) {
+        console.error("Failed to connect WebSocket:", error);
+        setWsConnected(false);
+      }
+    };
+
+    connectWebSocket();
+
+    return () => {
+      webSocketService.disconnect();
+      setWsConnected(false);
+    };
+  }, []);
+
+  // Load payments data
   React.useEffect(() => {
     const fetchPayments = async () => {
       setLoading(true);
@@ -176,8 +229,120 @@ export function PaymentsPage() {
     console.log("Downloading receipt for:", payment);
   };
 
-  const handleDelete = (payment: any) => {
-    console.log("Deleting payment:", payment);
+  // Handle mark as paid
+  const handleMarkAsPaid = async (payment: any) => {
+    if (!payment.orderId) {
+      alert("Không có mã đơn hàng để xử lý!");
+      return;
+    }
+
+    const confirmed = confirm(
+      `Bạn có chắc chắn muốn đánh dấu đơn hàng ${payment.orderId} là đã thanh toán?`
+    );
+    if (!confirmed) return;
+
+    try {
+      setProcessingPayments((prev) => new Set(prev).add(payment.orderId));
+
+      // Subscribe to WebSocket for this order
+      const unsubscribe = webSocketService.subscribeToPaymentResult(
+        payment.orderId,
+        (status) => {
+          console.log(
+            `Payment status updated: ${status} for order: ${payment.orderId}`
+          );
+
+          // Update payment status in the list
+          setPayments((prevPayments) =>
+            prevPayments.map((p) =>
+              p.orderId === payment.orderId
+                ? { ...p, status: status.toLowerCase() === "confirmed" ? "completed" : status.toLowerCase() }
+                : p
+            )
+          );
+
+          setProcessingPayments((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(payment.orderId);
+            return newSet;
+          });
+
+          // Auto unsubscribe after receiving result
+          setTimeout(unsubscribe, 1000);
+        }
+      );
+
+      // Call API to mark as paid
+      await markOrderAsPaid(payment.orderId);
+      alert("Đã gửi yêu cầu đánh dấu thanh toán thành công!");
+    } catch (error) {
+      console.error("Error marking payment as paid:", error);
+      alert("Lỗi khi đánh dấu thanh toán!");
+
+      setProcessingPayments((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(payment.orderId);
+        return newSet;
+      });
+    }
+  };
+
+  // Handle mark as failed
+  const handleMarkAsFailed = async (payment: any) => {
+    if (!payment.orderId) {
+      alert("Không có mã đơn hàng để xử lý!");
+      return;
+    }
+
+    const confirmed = confirm(
+      `Bạn có chắc chắn muốn đánh dấu đơn hàng ${payment.orderId} là thất bại?`
+    );
+    if (!confirmed) return;
+
+    try {
+      setProcessingPayments((prev) => new Set(prev).add(payment.orderId));
+
+      // Subscribe to WebSocket for this order
+      const unsubscribe = webSocketService.subscribeToPaymentResult(
+        payment.orderId,
+        (status) => {
+          console.log(
+            `Payment status updated: ${status} for order: ${payment.orderId}`
+          );
+
+          // Update payment status in the list
+          setPayments((prevPayments) =>
+            prevPayments.map((p) =>
+              p.orderId === payment.orderId
+                ? { ...p, status: status.toLowerCase() }
+                : p
+            )
+          );
+
+          setProcessingPayments((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(payment.orderId);
+            return newSet;
+          });
+
+          // Auto unsubscribe after receiving result
+          setTimeout(unsubscribe, 1000);
+        }
+      );
+
+      // Call API to mark as failed
+      await markOrderAsFailed(payment.orderId);
+      alert("Đã gửi yêu cầu đánh dấu thanh toán thất bại!");
+    } catch (error) {
+      console.error("Error marking payment as failed:", error);
+      alert("Lỗi khi đánh dấu thanh toán!");
+
+      setProcessingPayments((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(payment.orderId);
+        return newSet;
+      });
+    }
   };
 
   return (
@@ -191,10 +356,30 @@ export function PaymentsPage() {
             Theo dõi các giao dịch thanh toán
           </p>
         </div>
-        <Button variant="outline">
-          <Download className="mr-2 h-4 w-4" />
-          Xuất báo cáo
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* WebSocket status indicator */}
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100">
+            {wsConnected ? (
+              <>
+                <Wifi className="h-4 w-4 text-green-600" />
+                <span className="text-sm text-green-600 font-medium">
+                  Connected
+                </span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-4 w-4 text-red-600" />
+                <span className="text-sm text-red-600 font-medium">
+                  Disconnected
+                </span>
+              </>
+            )}
+          </div>
+          <Button variant="outline">
+            <Download className="mr-2 h-4 w-4" />
+            Xuất báo cáo
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center space-x-2">
@@ -205,8 +390,7 @@ export function PaymentsPage() {
               <SelectValue placeholder="Phương thức thanh toán" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tất cả</SelectItem>{" "}
-              {/* Hiển thị cả COD và VNPay */}
+              <SelectItem value="all">Tất cả</SelectItem>
               <SelectItem value="VNPay">VNPay</SelectItem>
               <SelectItem value="COD">COD</SelectItem>
             </SelectContent>
@@ -259,10 +443,26 @@ export function PaymentsPage() {
                       {payment.customerName || "Không có tên khách hàng"}
                     </TableCell>
                     <TableCell>
-                      {payment.customerEmail || "Không có email"}
+                      <div className="flex items-center gap-2">
+                        {payment.method === "VNPay" && (
+                          <CreditCard className="h-4 w-4" />
+                        )}
+                        {payment.method === "MoMo" && (
+                          <Smartphone className="h-4 w-4" />
+                        )}
+                        {payment.method === "COD" && <Banknote className="h-4 w-4" />}
+                        <Badge variant="outline">{payment.method}</Badge>
+                      </div>
                     </TableCell>
                     <TableCell>{formatCurrency(payment.amount)}</TableCell>
-                    <TableCell>{getStatusBadge(payment.status)}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {getStatusBadge(payment.status)}
+                        {processingPayments.has(payment.orderId) && (
+                          <Clock className="h-4 w-4 text-blue-600 animate-spin" />
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {payment.paidAt
                         ? new Date(payment.paidAt).toLocaleString("vi-VN")
@@ -276,15 +476,35 @@ export function PaymentsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => handleViewDetails(payment)}
-                          >
+                          <DropdownMenuItem onClick={() => handleViewDetails(payment)}>
                             <Eye className="mr-2 h-4 w-4" />
                             Xem chi tiết
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleDownloadReceipt(payment)}
-                          >
+
+                          {/* Payment action buttons */}
+                          {payment.status !== "completed" &&
+                            payment.status !== "failed" && (
+                              <>
+                                <DropdownMenuItem
+                                  onClick={() => handleMarkAsPaid(payment)}
+                                  disabled={processingPayments.has(payment.orderId)}
+                                  className="text-green-600"
+                                >
+                                  <CheckCircle className="mr-2 h-4 w-4" />
+                                  Đánh dấu đã thanh toán
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleMarkAsFailed(payment)}
+                                  disabled={processingPayments.has(payment.orderId)}
+                                  className="text-red-600"
+                                >
+                                  <XCircle className="mr-2 h-4 w-4" />
+                                  Đánh dấu thất bại
+                                </DropdownMenuItem>
+                              </>
+                            )}
+
+                          <DropdownMenuItem onClick={() => handleDownloadReceipt(payment)}>
                             <Download className="mr-2 h-4 w-4" />
                             Tải biên lai
                           </DropdownMenuItem>
@@ -293,12 +513,13 @@ export function PaymentsPage() {
                     </TableCell>
                   </TableRow>
                 ))
-              )}
+              }
             </TableBody>
           </Table>
         </CardContent>
       </Card>
 
+      {/* Pagination */}
       <div className="flex items-center justify-center space-x-4 mt-6 py-4">
         <Button
           variant="outline"

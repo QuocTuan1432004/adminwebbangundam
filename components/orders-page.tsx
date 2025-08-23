@@ -52,6 +52,7 @@ import {
   adminCancelOrder,
   Order,
 } from "../hooks/Order/Order";
+import { webSocketService } from "@/lib/websocket";
 
 // Mock data cho sản phẩm
 const products = [
@@ -101,6 +102,9 @@ export function OrdersPage() {
   });
   const [orderProducts, setOrderProducts] = React.useState<OrderProduct[]>([]);
 
+  // WebSocket states
+  const [wsConnected, setWsConnected] = React.useState(false);
+
   // Fetch data với phân trang
   React.useEffect(() => {
     const fetchOrders = async () => {
@@ -121,6 +125,23 @@ export function OrdersPage() {
     };
     fetchOrders();
   }, [currentPage, pageSize]);
+
+  // Kết nối WebSocket khi component mount
+  React.useEffect(() => {
+    const connectWebSocket = async () => {
+      try {
+        await webSocketService.connect();
+        setWsConnected(true);
+        console.log("WebSocket connected in orders page");
+      } catch (error) {
+        console.error("Failed to connect WebSocket in orders page:", error);
+        setWsConnected(false);
+      }
+    };
+
+    connectWebSocket();
+  }, []);
+
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
       order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
