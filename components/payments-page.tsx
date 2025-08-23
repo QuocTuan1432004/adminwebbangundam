@@ -513,7 +513,7 @@ export function PaymentsPage() {
                     </TableCell>
                   </TableRow>
                 ))
-              }
+              )}
             </TableBody>
           </Table>
         </CardContent>

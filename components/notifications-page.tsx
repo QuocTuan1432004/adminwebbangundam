@@ -15,220 +15,346 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Check, CheckCheck } from "lucide-react";
 
-// Import thêm WebSocket
-import { orderApi, OrderNotificationData } from "@/hooks/Order/Order.ts";
-import { AdminAuthService } from "@/hooks/user/userAuth";
-import { webSocketService } from "@/lib/websocket";
+// Import API functions
+import { 
+  getAllNotifications, 
+  markAsRead, 
+  markAllAsRead,
+  getUnreadNotificationCount,
+  type Notification 
+} from "@/hooks/notification/Notification";
 
-// Interface cho notification item
-interface NotificationItem {
-  id: number;
-  title: string;
-  message: string;
-  type: string;
-  recipient: string;
-  recipientName: string;
-  recipientEmail: string;
-  isRead: boolean;
-  sentAt: string;
-  status: string;
-  priority: string;
-  orderId?: string;
-}
+// Import userApi để lấy thông tin user
+import { userApi, type UserResponse } from "@/hooks/user/userApi";
 
 export function NotificationsPage() {
   // State cho notifications
-  const [notifications, setNotifications] = React.useState<NotificationItem[]>([]);
+  const [notifications, setNotifications] = React.useState<Notification[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = React.useState(0);
+  
+  // State cho user info cache
+  const [userCache, setUserCache] = React.useState<Record<string, UserResponse>>({});
+  
+  // State cho auto-refresh
+  const [lastFetchTime, setLastFetchTime] = React.useState<Date>(new Date());
+  const [isAutoRefreshing, setIsAutoRefreshing] = React.useState(false);
+  const [newNotificationsCount, setNewNotificationsCount] = React.useState(0);
 
-  // WebSocket states
-  const [wsConnected, setWsConnected] = React.useState(false);
+  // Refs để tránh stale closure và infinite loops
+  const notificationsRef = React.useRef<Notification[]>([]);
+  const userCacheRef = React.useRef<Record<string, UserResponse>>({});
 
-  // WebSocket connection
+  // Update refs khi state thay đổi
   React.useEffect(() => {
-    const connectWebSocket = async () => {
-      try {
-        console.log('🚀 Notifications: Connecting to WebSocket...');
-        await webSocketService.connect();
-        setWsConnected(true);
-        console.log('✅ Notifications: WebSocket connected successfully');
-      } catch (error) {
-        console.error('❌ Notifications: Failed to connect WebSocket:', error);
-        setWsConnected(false);
+    notificationsRef.current = notifications;
+  }, [notifications]);
+
+  React.useEffect(() => {
+    userCacheRef.current = userCache;
+  }, [userCache]);
+
+  // Helper functions
+  const isNotificationRead = (notification: Notification): boolean => {
+    return notification.isRead === true;
+  };
+
+  const getUnreadNotifications = (notifications: Notification[]): Notification[] => {
+    return notifications.filter(notification => !isNotificationRead(notification));
+  };
+
+  const countUnreadNotifications = (notifications: Notification[]): number => {
+    return getUnreadNotifications(notifications).length;
+  };
+
+  // Function để load user info cho notifications mới (sử dụng ref)
+  const loadUserInfoForNewNotifications = async (newNotifications: Notification[]) => {
+    const uniqueUserIds = Array.from(new Set(newNotifications.map(n => n.userId)));
+    const token = localStorage.getItem('admin_token');
+    
+    if (token && uniqueUserIds.length > 0) {
+      const userInfoPromises = uniqueUserIds.map(async (userId) => {
+        // Sử dụng ref thay vì state
+        if (userCacheRef.current[userId]) return { userId, userInfo: userCacheRef.current[userId] };
+        
+        try {
+          const response = await userApi.getUserById(token, userId);
+          return { userId, userInfo: response.result };
+        } catch (error) {
+          console.error(`Error loading user ${userId}:`, error);
+          return { userId, userInfo: null };
+        }
+      });
+
+      const userInfoResults = await Promise.all(userInfoPromises);
+      const newUserCache: Record<string, UserResponse> = {};
+      
+      userInfoResults.forEach(({ userId, userInfo }) => {
+        if (userInfo) {
+          newUserCache[userId] = userInfo;
+        }
+      });
+
+      if (Object.keys(newUserCache).length > 0) {
+        setUserCache(prev => ({ ...prev, ...newUserCache }));
       }
-    };
+    }
+  };
 
-    connectWebSocket();
+  // Function để kiểm tra thông báo mới (không có dependencies)
+  const checkForNewNotifications = React.useCallback(async () => {
+    try {
+      setIsAutoRefreshing(true);
+      
+      const freshNotifications = await getAllNotifications();
+      
+      // Sử dụng ref để lấy current notifications
+      const currentNotifications = notificationsRef.current;
+      const currentIds = new Set(currentNotifications.map(n => n.id));
+      const newNotifications = freshNotifications.filter(n => !currentIds.has(n.id));
+      
+      if (newNotifications.length > 0) {
+        
+        // Load user info cho notifications mới
+        await loadUserInfoForNewNotifications(newNotifications);
+        
+        // Update notifications state
+        setNotifications(prev => {
+          const updated = [...newNotifications, ...prev];
+          const newUnreadCount = countUnreadNotifications(updated);
+          setUnreadCount(newUnreadCount);
+          
+          // Hiển thị toast notification
+          setNewNotificationsCount(newNotifications.length);
+          setTimeout(() => setNewNotificationsCount(0), 3000);
+        
+          return updated;
+        });
+      } else {
+        // Kiểm tra read status changes
+        const currentNotifications = notificationsRef.current;
+        const updatedNotifications = currentNotifications.map(currentNotification => {
+          const freshNotification = freshNotifications.find(n => n.id === currentNotification.id);
+          if (freshNotification && freshNotification.isRead !== currentNotification.isRead) {
+            return { ...currentNotification, isRead: freshNotification.isRead };
+          }
+          return currentNotification;
+        });
+        
+        const hasReadStatusChange = updatedNotifications.some((n, index) => 
+          n.isRead !== currentNotifications[index]?.isRead
+        );
+        
+        if (hasReadStatusChange) {
+          setNotifications(updatedNotifications);
+          const newUnreadCount = countUnreadNotifications(updatedNotifications);
+          setUnreadCount(newUnreadCount);
+        }
+      }
+      
+      setLastFetchTime(new Date());
+      
+    } catch (error) {
+      console.error('❌ Error checking for new notifications:', error);
+    } finally {
+      setIsAutoRefreshing(false);
+    }
+  }, []); // EMPTY dependency array để tránh infinite loop
 
-    // Subscribe to connection status changes
-    const unsubscribeStatus = webSocketService.onConnectionStatusChange((connected) => {
-      setWsConnected(connected);
-      console.log(`🔄 Notifications: WebSocket status changed to ${connected ? 'Connected' : 'Disconnected'}`);
-    });
+  // Load notifications lần đầu
+  const loadNotifications = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const notificationsData = await getAllNotifications();
+      
+      setNotifications(notificationsData);
+      
+      const localUnreadCount = countUnreadNotifications(notificationsData);
+      setUnreadCount(localUnreadCount);
 
-    // Cleanup
+      // Load user info cho tất cả notifications
+      const uniqueUserIds = Array.from(new Set(notificationsData.map(n => n.userId)));
+      const token = localStorage.getItem('admin_token');
+      
+      if (token && uniqueUserIds.length > 0) {
+        const userInfoPromises = uniqueUserIds.map(async (userId) => {
+          try {
+            const response = await userApi.getUserById(token, userId);
+            return { userId, userInfo: response.result };
+          } catch (error) {
+            console.error(`Error loading user ${userId}:`, error);
+            return { userId, userInfo: null };
+          }
+        });
+
+        const userInfoResults = await Promise.all(userInfoPromises);
+        const newUserCache: Record<string, UserResponse> = {};
+        
+        userInfoResults.forEach(({ userId, userInfo }) => {
+          if (userInfo) {
+            newUserCache[userId] = userInfo;
+          }
+        });
+
+        setUserCache(newUserCache);
+      }
+      
+      setLastFetchTime(new Date());
+      
+    } catch (err) {
+      console.error("❌ Error loading notifications:", err);
+      setError(err instanceof Error ? err.message : 'Lỗi khi tải thông báo');
+    } finally {
+      setLoading(false);
+    }
+  }, []); // EMPTY dependency array
+
+  // Setup auto-refresh interval (chỉ chạy 1 lần)
+  React.useEffect(() => {
+    // Load notifications lần đầu
+    loadNotifications();
+
+    // Setup interval để check mỗi 5 giây
+    const intervalId = setInterval(() => {
+      checkForNewNotifications();
+    }, 5000);
+
+    // Cleanup interval khi component unmount
     return () => {
-      unsubscribeStatus();
-      webSocketService.disconnect();
+      clearInterval(intervalId);
     };
-  }, []);
+  }, []); // EMPTY dependency array - chỉ chạy 1 lần
 
-  // Subscribe to payment notifications via WebSocket
-  React.useEffect(() => {
-    if (!wsConnected) return;
-
-    console.log('🔔 Setting up notifications subscription...');
-
-    const unsubscribe = webSocketService.subscribeToNotifications((notificationData) => {
-      try {
-        console.log('📨 Processing notification data:', notificationData);
-        
-        const newNotification: NotificationItem = {
-          id: Date.now(),
-          title: "Thanh toán thành công",
-          message: `Đơn hàng ${notificationData.orderId} đã được thanh toán thành công với số tiền ${formatCurrency(notificationData.amount)}`,
-          type: "order",
-          recipient: "specific",
-          recipientName: notificationData.customerName || "Khách hàng",
-          recipientEmail: notificationData.customerEmail || "",
-          isRead: false,
-          sentAt: new Date().toLocaleString('vi-VN'),
-          status: "sent",
-          priority: "normal",
-          orderId: notificationData.orderId,
-        };
-
-        setNotifications(prev => [newNotification, ...prev]);
-        
-        if (Notification.permission === "granted") {
-          new Notification("Thanh toán mới", {
-            body: `Đơn hàng ${notificationData.orderId} đã được thanh toán thành công`,
-            icon: "/favicon.ico"
-          });
-        }
-        
-      } catch (error) {
-        console.error('❌ Error processing payment notification:', error);
-      }
-    });
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, [wsConnected]);
-
-  // Convert PaymentLog data to notification format
-  const convertPaymentLogToNotification = (paymentLog: OrderNotificationData, index: number): NotificationItem => {
-    return {
-      id: 2000 + index,
-      title: "Thanh toán thành công",
-      message: `Đơn hàng ${paymentLog.orderId} đã được thanh toán thành công qua ${paymentLog.method} với số tiền ${formatCurrency(paymentLog.totalAmount)}${paymentLog.transactionId ? ` - Mã GD: ${paymentLog.transactionId}` : ''}`,
-      type: "order",
-      recipient: "specific",
-      recipientName: paymentLog.customerName,
-      recipientEmail: paymentLog.customerEmail,
-      isRead: false,
-      sentAt: paymentLog.paidAt ? new Date(paymentLog.paidAt).toLocaleString('vi-VN') : new Date(paymentLog.createdAt).toLocaleString('vi-VN'),
-      status: "sent",
-      priority: "normal",
-      orderId: paymentLog.orderId,
+  // Handle mark as read
+  const handleMarkAsRead = async (notificationId: string) => {
+    const notification = notifications.find(n => n.id === notificationId);
+    
+    if (!notification) {
+      console.error(`❌ Notification with ID ${notificationId} not found`);
+      return;
     }
-  }
 
-  // Fetch paid orders
-  React.useEffect(() => {
-    const fetchPaidOrdersFromPaymentLogs = async () => {
-      try {
-        setLoading(true);
-        setError("");
+    if (isNotificationRead(notification)) {
+      console.log(`ℹ️ Notification ${notificationId} already marked as read`);
+      return;
+    }
+
+    try {
+      console.log(`📖 Marking notification ${notificationId} as read...`);
+      await markAsRead(notificationId);
+      
+      // Update local state
+      setNotifications(prev => {
+        const updated = prev.map(notification => 
+          notification.id === notificationId 
+            ? { ...notification, isRead: true }
+            : notification
+        );
         
-        const token = AdminAuthService.getToken();
-        if (!token) {
-          setError("Không có token xác thực");
-          setNotifications([]);
-          setLoading(false);
-          return;
-        }
-
-        console.log("🔄 Fetching paid orders for notifications...");
-        const response = await orderApi.getPaidOrdersForNotifications(token);
-        
-        if (response.result && Array.isArray(response.result) && response.result.length > 0) {
-          console.log("✅ Paid orders found:", response.result.length);
-          
-          const paymentNotifications = response.result.map((order, index) => 
-            convertPaymentLogToNotification(order, index)
-          );
-          
-          // ✅ Chỉ dùng real data từ API
-          paymentNotifications.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
-          
-          setNotifications(paymentNotifications);
-          console.log("🎯 Final notifications:", paymentNotifications.length);
-        } else {
-          console.log("⚠️ No confirmed payments found");
-          setNotifications([]); // ✅ Không có data thì để trống
-          // ❌ Không set error nữa, để trống thay vì hiển thị lỗi
-        }
-      } catch (err) {
-        console.error("❌ API Error:", err);
-        setError(`Lỗi kết nối API: ${err.message}`);
-        setNotifications([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchPaidOrdersFromPaymentLogs();
-  }, []);
-
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency: "VND",
-    }).format(amount)
-  }
-
-  const getStatusBadge = (status: string) => {
-    const statusMap = {
-      sent: { label: "Đã gửi", variant: "default" as const },
-      draft: { label: "Bản nháp", variant: "secondary" as const },
-      scheduled: { label: "Đã lên lịch", variant: "outline" as const },
-      failed: { label: "Gửi thất bại", variant: "destructive" as const },
+        const newUnreadCount = countUnreadNotifications(updated);
+        setUnreadCount(newUnreadCount);
+        return updated;
+      });
+      
+    } catch (err) {
+      console.error("❌ Error marking notification as read:", err);
+      setError(err instanceof Error ? err.message : 'Lỗi khi đánh dấu đã đọc');
     }
-    const statusInfo = statusMap[status as keyof typeof statusMap] || { label: status, variant: "secondary" as const }
-    return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
-  }
+  };
 
-  const getPriorityBadge = (priority: string) => {
-    const priorityMap = {
-      high: { label: "Cao", variant: "destructive" as const },
-      normal: { label: "Bình thường", variant: "default" as const },
-      low: { label: "Thấp", variant: "secondary" as const },
+  // Handle mark all as read
+  const handleMarkAllAsRead = async () => {
+    const unreadNotifications = getUnreadNotifications(notifications);
+    
+    if (unreadNotifications.length === 0) {
+      return;
     }
-    const priorityInfo = priorityMap[priority as keyof typeof priorityMap] || {
-      label: priority,
-      variant: "secondary" as const,
-    }
-    return <Badge variant={priorityInfo.variant}>{priorityInfo.label}</Badge>
-  }
 
-  const getTypeBadge = (type: string) => {
-    const typeMap = {
-      order: { label: "Đơn hàng", variant: "default" as const },
-      promotion: { label: "Khuyến mãi", variant: "outline" as const },
-      inventory: { label: "Kho hàng", variant: "secondary" as const },
-      account: { label: "Tài khoản", variant: "outline" as const },
-      general: { label: "Chung", variant: "secondary" as const },
+    try {
+      setLoading(true);
+      console.log(`📖 Marking ${unreadNotifications.length} notifications as read...`);
+      
+      await markAllAsRead();
+      
+      setNotifications(prev => {
+        const updated = prev.map(notification => ({ ...notification, isRead: true }));
+        setUnreadCount(0);
+        console.log(`✅ All notifications marked as read`);
+        return updated;
+      });
+      
+    } catch (err) {
+      console.error("❌ Error marking all notifications as read:", err);
+      setError(err instanceof Error ? err.message : 'Lỗi khi đánh dấu tất cả đã đọc');
+    } finally {
+      setLoading(false);
     }
-    const typeInfo = typeMap[type as keyof typeof typeMap] || { label: type, variant: "secondary" as const }
-    return <Badge variant={typeInfo.variant}>{typeInfo.label}</Badge>
-  }
+  };
+
+  // Format date
+  const formatDate = (date: Date) => {
+    return new Intl.DateTimeFormat('vi-VN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(date);
+  };
+
+  // Render functions
+  const renderUserInfo = (userId: string) => {
+    const userInfo = userCache[userId];
+    
+    if (userInfo) {
+      return (
+        <div className="text-sm">
+          <p className="font-medium text-gray-900">
+            {userInfo.email}
+          </p>
+          <p className="text-muted-foreground text-xs">
+            ID: {userId}
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="text-sm">
+        <p className="text-muted-foreground">Đang tải...</p>
+        <p className="text-muted-foreground text-xs">ID: {userId}</p>
+      </div>
+    );
+  };
+
+  const renderReadStatus = (notification: Notification) => {
+    if (isNotificationRead(notification)) {
+      return (
+        <Badge variant="secondary" size="sm" className="mt-1">
+          ✓ Đã đọc
+        </Badge>
+      );
+    } else {
+      return (
+        <Badge variant="outline" size="sm" className="mt-1">
+          ● Chưa đọc
+        </Badge>
+      );
+    }
+  };
+
+  const getRowClassName = (notification: Notification): string => {
+    const baseClass = "";
+    const unreadClass = "bg-blue-50 border-l-4 border-l-blue-400";
+    
+    return isNotificationRead(notification) ? baseClass : unreadClass;
+  };
 
   // Loading state
   if (loading) {
@@ -237,7 +363,7 @@ export function NotificationsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-3xl font-bold tracking-tight">Quản lý thông báo</h2>
-            <p className="text-muted-foreground">Gửi và theo dõi thông báo đến khách hàng</p>
+            <p className="text-muted-foreground">Xem và quản lý thông báo hệ thống</p>
           </div>
         </div>
         <Card>
@@ -249,69 +375,208 @@ export function NotificationsPage() {
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Quản lý thông báo</h2>
-          <p className="text-muted-foreground">Gửi và theo dõi thông báo đến khách hàng</p>
-        </div>
-      </div>
+      {/* Debug info - thêm để kiểm tra */}
+      {process.env.NODE_ENV === 'development' && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>🐛 Debug Info:</p>
+              <p>• Current time: {new Date().toLocaleTimeString()}</p>
+              <p>• Last fetch: {formatDate(lastFetchTime)}</p>
+              <p>• Auto refreshing: {isAutoRefreshing ? 'Yes' : 'No'}</p>
+              <p>• Loading: {loading ? 'Yes' : 'No'}</p>
+              <p>• Notifications count: {notifications.length}</p>
+              <p>• Unread count: {unreadCount}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Error display - chỉ hiển thị lỗi API thực sự */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-600 text-sm">❌ {error}</p>
+      {/* New notification toast */}
+      {newNotificationsCount > 0 && (
+        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-top-2">
+          <Card className="border-green-500 shadow-lg">
+            <CardContent className="p-4">
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <p className="text-sm font-medium text-green-700">
+                  🔔 {newNotificationsCount} thông báo mới
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Quản lý thông báo</h2>
+          <p className="text-muted-foreground">
+            Xem và quản lý thông báo hệ thống
+            {unreadCount > 0 && (
+              <Badge variant="destructive" className="ml-2">
+                {unreadCount} chưa đọc
+              </Badge>
+            )}
+          </p>
+          {/* Auto-refresh indicator */}
+          <p className="text-xs text-muted-foreground mt-1">
+            {isAutoRefreshing ? (
+              <span className="flex items-center">
+                <div className="w-3 h-3 border border-blue-500 border-t-transparent rounded-full animate-spin mr-1"></div>
+                Đang kiểm tra thông báo mới...
+              </span>
+            ) : (
+              `Cập nhật lần cuối: ${formatDate(lastFetchTime)} • Tự động kiểm tra mỗi 5 giây`
+            )}
+          </p>
+        </div>
+        
+        {/* Action buttons */}
+        <div className="flex gap-2">
+          {unreadCount > 0 && (
+            <Button onClick={handleMarkAllAsRead} disabled={loading}>
+              <CheckCheck className="mr-2 h-4 w-4" />
+              Đánh dấu tất cả đã đọc ({unreadCount})
+            </Button>
+          )}
+          
+          {/* Manual refresh button */}
+          <Button 
+            variant="outline" 
+            onClick={loadNotifications} 
+            disabled={loading || isAutoRefreshing}
+          >
+            🔄 Làm mới
+          </Button>
+
+          {/* Test button để force trigger auto-refresh */}
+          {process.env.NODE_ENV === 'development' && (
+            <Button 
+              variant="secondary" 
+              size="sm"
+              onClick={checkForNewNotifications}
+              disabled={isAutoRefreshing}
+            >
+              Test Auto-Refresh
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Stats display */}
+      {notifications.length > 0 && (
+        <div className="grid grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-blue-600">{notifications.length}</p>
+                <p className="text-sm text-muted-foreground">Tổng thông báo</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-orange-600">{unreadCount}</p>
+                <p className="text-sm text-muted-foreground">Chưa đọc</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-green-600">{notifications.length - unreadCount}</p>
+                <p className="text-sm text-muted-foreground">Đã đọc</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Error display */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-600 text-sm">❌ {error}</p>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="mt-2"
+            onClick={() => {
+              setError(null);
+              loadNotifications();
+            }}
+          >
+            Thử lại
+          </Button>
+        </div>
+      )}
+
+      {/* Notifications table */}
       <Card>
         <CardContent className="p-0">
-          {/* ✅ Hiển thị empty state nếu không có notifications */}
-          {notifications.length === 0 && !loading ? (
+          {notifications.length === 0 ? (
             <div className="p-8 text-center">
-              <p className="text-muted-foreground">Chưa có thông báo thanh toán nào</p>
-              <p className="text-xs text-muted-foreground mt-2">Thông báo sẽ xuất hiện khi có đơn hàng được thanh toán thành công</p>
+              <p className="text-muted-foreground">Chưa có thông báo nào</p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Thông báo sẽ xuất hiện khi có hoạt động trong hệ thống
+              </p>
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tiêu đề</TableHead>
-                  <TableHead>Loại</TableHead>
-                  <TableHead>Người nhận</TableHead>
-                  <TableHead>Độ ưu tiên</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead>Thời gian gửi</TableHead>
+                  <TableHead className="w-1/2">Thông báo</TableHead>
+                  <TableHead className="w-1/4">Người nhận</TableHead>
+                  <TableHead className="w-32">Thời gian</TableHead>
+                  <TableHead className="text-right w-32">Thao tác</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {notifications.map((notification) => (
-                  <TableRow key={notification.id}>
-                    <TableCell>
-                      <div className="flex items-center space-x-2">
-                        {!notification.isRead && notification.status === "sent" && (
-                          <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                  <TableRow key={notification.id} className={getRowClassName(notification)}>
+                    <TableCell className="w-1/2">
+                      <div className="flex items-start space-x-3">
+                        {!isNotificationRead(notification) && (
+                          <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0" />
                         )}
-                        <div>
-                          <p className="font-medium">{notification.title}</p>
-                          <p className="text-sm text-muted-foreground truncate max-w-xs">{notification.message}</p>
-                          {notification.orderId && (
-                            <p className="text-xs text-blue-600">#{notification.orderId}</p>
-                          )}
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm break-words whitespace-pre-wrap ${!isNotificationRead(notification) ? "font-medium" : ""}`}>
+                            {notification.message}
+                          </p>
+                          {renderReadStatus(notification)}
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>{getTypeBadge(notification.type)}</TableCell>
-                    <TableCell>
-                      <span className="text-sm">{notification.recipientName}</span>
+                    <TableCell className="w-1/4">
+                      {renderUserInfo(notification.userId)}
                     </TableCell>
-                    <TableCell>{getPriorityBadge(notification.priority)}</TableCell>
-                    <TableCell>{getStatusBadge(notification.status)}</TableCell>
-                    <TableCell>{notification.sentAt}</TableCell>
+                    <TableCell className="w-32">
+                      <span className="text-sm text-muted-foreground whitespace-nowrap">
+                        {formatDate(notification.sentAt)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right w-32">
+                      {!isNotificationRead(notification) ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleMarkAsRead(notification.id)}
+                          className="h-8 px-2"
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          Đánh dấu đã đọc
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-green-600">✓ Đã đọc</span>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -319,6 +584,19 @@ export function NotificationsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Summary */}
+      {notifications.length > 0 && (
+        <div className="text-sm text-muted-foreground text-center">
+          Tổng cộng: {notifications.length} thông báo • 
+          {unreadCount > 0 ? (
+            <span className="text-orange-600 font-medium"> {unreadCount} chưa đọc</span>
+          ) : (
+            <span className="text-green-600 font-medium"> Tất cả đã đọc</span>
+          )}
+          • {notifications.length - unreadCount} đã đọc
+        </div>
+      )}
     </div>
-  )
+  );
 }

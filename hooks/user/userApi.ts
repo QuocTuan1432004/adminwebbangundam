@@ -142,6 +142,28 @@ export const userApi = {
     }
   },
 
+  // Get user by ID
+  getUserById: async (token: string, userId: string): Promise<ApiResponse<UserResponse>> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Get user by ID API error:', error);
+      throw error;
+    }
+  },
+
   // Get all users (for admin to view)
   getAllUsers: async (token: string): Promise<ApiResponse<UserResponse[]>> => {
     try {
