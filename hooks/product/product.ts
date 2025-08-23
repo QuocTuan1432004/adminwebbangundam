@@ -170,3 +170,21 @@ export const deleteProduct = async (productId: string) => {
   const result = await handleResponse(response);
   return result;
 };
+
+// Lấy tổng số sản phẩm
+export const getProductCount = async (): Promise<number> => {
+  try {
+    const response = await authenticatedFetch(`${API_BASE_URL}/product/count`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    const result = await handleResponse(response);
+    return result.result || 0;
+  } catch (error) {
+    console.error('Error getting product count:', error);
+    throw error;
+  }
+};

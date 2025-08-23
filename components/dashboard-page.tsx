@@ -12,12 +12,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { userApi } from "@/hooks/user/userApi";
 import { AdminAuthService } from "@/hooks/user/userAuth";
+import { getProductCount } from "@/hooks/product/product";
 
 // Mock data for other stats
 const dashboardStats = {
   totalRevenue: "2,450,000,000",
   totalOrders: 1234,
-  totalProducts: 567,
 };
 
 const orders = [
@@ -82,6 +82,10 @@ export function DashboardPage() {
   const [loadingCustomers, setLoadingCustomers] = useState(true);
   const [customerError, setCustomerError] = useState("");
 
+  const [totalProducts, setTotalProducts] = useState<number>(0);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [productError, setProductError] = useState("");
+
   // Load total customer count from API
   useEffect(() => {
     const loadCustomerCount = async () => {
@@ -111,6 +115,26 @@ export function DashboardPage() {
     };
 
     loadCustomerCount();
+  }, []);
+
+  // Load total product count from API
+  useEffect(() => {
+    const loadProductCount = async () => {
+      try {
+        setLoadingProducts(true);
+        setProductError("");
+        
+        const count = await getProductCount();
+        setTotalProducts(count);
+      } catch (err) {
+        console.error("Error loading product count:", err);
+        setProductError("Lỗi khi tải số lượng sản phẩm");
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+
+    loadProductCount();
   }, []);
 
   const formatCurrency = (amount: number) => {
@@ -196,6 +220,7 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
+        {/* Updated Product Count Card */}
         <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-600">
@@ -207,16 +232,33 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">
-              {dashboardStats.totalProducts}
+              {loadingProducts ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-600 mr-2"></div>
+                  Loading...
+                </div>
+              ) : productError ? (
+                <span className="text-red-500 text-sm">Error</span>
+              ) : (
+                totalProducts.toLocaleString('vi-VN')
+              )}
             </div>
-            <div className="flex items-center text-xs text-green-600 mt-1">
-              <TrendingUp className="h-3 w-3 mr-1" />
-              +5 sản phẩm mới
-            </div>
+            {/* ❌ BỎ: "Dữ liệu thực từ API" text */}
+            {!loadingProducts && !productError && (
+              <div className="flex items-center text-xs text-green-600 mt-1">
+                <TrendingUp className="h-3 w-3 mr-1" />
+                +5 sản phẩm mới
+              </div>
+            )}
+            {productError && (
+              <div className="flex items-center text-xs text-red-500 mt-1">
+                {productError}
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Updated Customer Count Card with Real Data */}
+        {/* Customer Count Card */}
         <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-600">
@@ -239,6 +281,7 @@ export function DashboardPage() {
                 totalCustomers.toLocaleString('vi-VN')
               )}
             </div>
+            {/* ❌ BỎ: "Dữ liệu thực từ API" text */}
             {!loadingCustomers && !customerError && (
               <div className="flex items-center text-xs text-green-600 mt-1">
                 <TrendingUp className="h-3 w-3 mr-1" />
