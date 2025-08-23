@@ -380,22 +380,6 @@ export function NotificationsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Debug info - thêm để kiểm tra */}
-      {process.env.NODE_ENV === 'development' && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p>🐛 Debug Info:</p>
-              <p>• Current time: {new Date().toLocaleTimeString()}</p>
-              <p>• Last fetch: {formatDate(lastFetchTime)}</p>
-              <p>• Auto refreshing: {isAutoRefreshing ? 'Yes' : 'No'}</p>
-              <p>• Loading: {loading ? 'Yes' : 'No'}</p>
-              <p>• Notifications count: {notifications.length}</p>
-              <p>• Unread count: {unreadCount}</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* New notification toast */}
       {newNotificationsCount > 0 && (
