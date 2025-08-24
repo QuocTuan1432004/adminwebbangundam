@@ -188,7 +188,6 @@ export const getProductCount = async (): Promise<number> => {
     throw error;
   }
 };
-// ...existing code...
 
 export const getProductById = async (productId: string): Promise<Product> => {
   try {
@@ -213,8 +212,6 @@ export const getProductsByIds = async (productIds: string[]): Promise<{ [key: st
   try {
     if (productIds.length === 0) return {};
 
-    console.log("🔄 Loading products for IDs:", productIds);
-
     // Load song song tất cả products
     const promises = productIds.map(async (id) => {
       try {
@@ -237,10 +234,34 @@ export const getProductsByIds = async (productIds: string[]): Promise<{ [key: st
       }
     });
     
-    console.log("✅ Loaded products:", Object.keys(productsMap).length);
     return productsMap;
   } catch (error) {
     console.error('❌ Error getting products by IDs:', error);
     return {};
+  }
+};
+
+// ✅ THÊM: Lấy top 5 sản phẩm bán chạy nhất (lowest stock)
+export const getTop5BestSellerProducts = async (): Promise<Product[]> => {
+  try {
+    const response = await authenticatedFetch(`${API_BASE_URL}/product/getTop5BestSeller`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    const result = await handleResponse(response);
+    
+    if (result.result && Array.isArray(result.result)) {
+      const products = result.result.map(mapProductResponseToProduct);
+      return products;
+    }
+    
+    console.warn('⚠️ No best seller products found');
+    return [];
+  } catch (error) {
+    console.error('❌ Error getting top 5 best seller products:', error);
+    throw error;
   }
 };

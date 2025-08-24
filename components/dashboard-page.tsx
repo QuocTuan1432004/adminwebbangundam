@@ -13,39 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { userApi } from "@/hooks/user/userApi";
 import { AdminAuthService } from "@/hooks/user/userAuth";
-import { getProductCount } from "@/hooks/product/product";
+import { getProductCount, getTop5BestSellerProducts, Product } from "@/hooks/product/product";
 // ✅ THÊM: Import order API
 import { orderApi, getOrdersForAdmin, Order } from "@/hooks/Order/Order";
-
-const products = [
-  {
-    id: 1,
-    name: "RG RX-78-2 Gundam",
-    category: "Real Grade",
-    price: 650000,
-    stock: 25,
-    status: "active",
-    thumbnail: "/placeholder.svg?height=60&width=60&text=RG",
-  },
-  {
-    id: 2,
-    name: "MG Strike Freedom",
-    category: "Master Grade",
-    price: 1200000,
-    stock: 15,
-    status: "active",
-    thumbnail: "/placeholder.svg?height=60&width=60&text=MG",
-  },
-  {
-    id: 3,
-    name: "PG Unicorn Gundam",
-    category: "Perfect Grade",
-    price: 3500000,
-    stock: 5,
-    status: "active",
-    thumbnail: "/placeholder.svg?height=60&width=60&text=PG",
-  },
-];
 
 export function DashboardPage() {
   const [totalCustomers, setTotalCustomers] = useState<number>(0);
@@ -68,6 +38,11 @@ export function DashboardPage() {
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [loadingRecentOrders, setLoadingRecentOrders] = useState(true);
   const [recentOrdersError, setRecentOrdersError] = useState("");
+
+  // ✅ THÊM: States cho best seller products
+  const [bestSellerProducts, setBestSellerProducts] = useState<Product[]>([]);
+  const [loadingBestSellers, setLoadingBestSellers] = useState(true);
+  const [bestSellersError, setBestSellersError] = useState("");
 
   // Load total customer count from API
   useEffect(() => {
@@ -203,6 +178,35 @@ export function DashboardPage() {
     loadRecentOrders();
   }, []);
 
+  // ✅ THÊM: Load best seller products từ API
+  useEffect(() => {
+    const loadBestSellerProducts = async () => {
+      try {
+        setLoadingBestSellers(true);
+        setBestSellersError("");
+        
+        console.log("🔄 Loading best seller products...");
+        const products = await getTop5BestSellerProducts();
+        
+        if (products && products.length > 0) {
+          setBestSellerProducts(products);
+          console.log("✅ Best seller products loaded:", products.length);
+        } else {
+          setBestSellerProducts([]);
+          console.log("⚠️ No best seller products found");
+        }
+      } catch (err: any) {
+        console.error("❌ Error loading best seller products:", err);
+        setBestSellersError("Lỗi khi tải sản phẩm bán chạy");
+        setBestSellerProducts([]);
+      } finally {
+        setLoadingBestSellers(false);
+      }
+    };
+
+    loadBestSellerProducts();
+  }, []);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
@@ -241,6 +245,18 @@ export function DashboardPage() {
         {statusInfo.label}
       </Badge>
     );
+  };
+
+  // ✅ THÊM: Function để get stock status badge
+  const getStockBadge = (stockQuantity: number) => {
+    if (stockQuantity === 0) {
+      return <Badge variant="destructive" className="text-xs">Hết hàng</Badge>;
+    } else if (stockQuantity <= 5) {
+      return <Badge variant="secondary" className="text-xs">Sắp hết</Badge>;
+    } else if (stockQuantity <= 10) {
+      return <Badge variant="outline" className="text-xs">Ít hàng</Badge>;
+    }
+    return <Badge variant="default" className="text-xs">Còn hàng</Badge>;
   };
 
   return (
@@ -480,39 +496,86 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Products Card - Mock data */}
+        {/* ✅ SỬA: Best Seller Products Card với API thật */}
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="border-b border-slate-100">
             <CardTitle className="text-slate-900">Sản phẩm bán chạy</CardTitle>
           </CardHeader>
           <CardContent className="pt-6">
-            <div className="space-y-4">
-              {products.slice(0, 3).map((product) => (
-                <div
-                  key={product.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100"
+            {loadingBestSellers ? (
+              <div className="flex items-center justify-center py-6">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600 mr-2"></div>
+                <span className="text-sm text-muted-foreground">Đang tải sản phẩm...</span>
+              </div>
+            ) : bestSellersError ? (
+              <div className="text-center py-6">
+                <p className="text-red-500 text-sm">{bestSellersError}</p>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => window.location.reload()}
+                  className="mt-2"
                 >
-                  <div className="flex items-center space-x-3">
-                    <img
-                      src={product.thumbnail || "/placeholder.svg"}
-                      alt={product.name}
-                      className="w-10 h-10 rounded border border-slate-200"
-                    />
-                    <div>
+                  Thử lại
+                </Button>
+              </div>
+            ) : bestSellerProducts.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-muted-foreground text-sm">Chưa có sản phẩm nào</p>
+                <p className="text-xs text-muted-foreground mt-1">Sản phẩm bán chạy sẽ xuất hiện khi có dữ liệu</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {bestSellerProducts.slice(0, 3).map((product) => (
+                  <div
+                    key={product.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100 hover:bg-slate-100 transition-colors"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <img
+                        src={product.thumbnail || "/placeholder.svg"}
+                        alt={product.productName}
+                        className="w-10 h-10 rounded border border-slate-200 object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "/placeholder.svg?height=40&width=40&text=IMG";
+                        }}
+                      />
+                      <div>
+                        <p className="font-medium text-slate-900 text-sm">
+                          {product.productName}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <p className="text-xs text-slate-600">
+                            Còn {product.stockQuantity} sản phẩm
+                          </p>
+                          {getStockBadge(product.stockQuantity)}
+                        </div>
+                        {product.subcategory && (
+                          <p className="text-xs text-slate-500 mt-1">
+                            {product.subcategory.subCategoryName}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right">
                       <p className="font-medium text-slate-900">
-                        {product.name}
+                        {formatCurrency(product.price)}
                       </p>
-                      <p className="text-sm text-slate-600">
-                        Còn {product.stock} sản phẩm
-                      </p>
+                      {getStatusBadge(product.status)}
                     </div>
                   </div>
-                  <p className="font-medium text-slate-900">
-                    {formatCurrency(product.price)}
-                  </p>
-                </div>
-              ))}
-            </div>
+                ))}
+                
+                {/* Show more link if we have more products */}
+                {bestSellerProducts.length > 3 && (
+                  <div className="text-center pt-2 border-t border-slate-200">
+                    <p className="text-xs text-slate-500">
+                      Và {bestSellerProducts.length - 3} sản phẩm khác...
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
