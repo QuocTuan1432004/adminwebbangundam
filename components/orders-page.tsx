@@ -6,9 +6,6 @@ import {
   Trash2,
   Eye,
   MoreHorizontal,
-  Download,
-  Plus,
-  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -45,7 +42,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import {
   getOrdersForAdmin,
   updateOrderStatus,
@@ -55,22 +51,6 @@ import {
 // ✅ THÊM: Import product API
 import { getProductsByIds, Product } from "@/hooks/product/product";
 import { webSocketService } from "@/lib/websocket";
-
-// Mock data cho sản phẩm (giữ lại cho add order form)
-const products = [
-  { id: "P001", name: "RG RX-78-2 Gundam", price: 650000, stock: 15 },
-  { id: "P002", name: "MG Strike Freedom", price: 1200000, stock: 8 },
-  { id: "P003", name: "PG Unicorn Gundam", price: 3500000, stock: 3 },
-  { id: "P004", name: "HG Barbatos", price: 450000, stock: 25 },
-  { id: "P005", name: "RG Nu Gundam", price: 850000, stock: 12 },
-];
-
-interface OrderProduct {
-  productId: string;
-  name: string;
-  price: number;
-  quantity: number;
-}
 
 export function OrdersPage() {
   // States cho orders
@@ -91,23 +71,11 @@ export function OrdersPage() {
   const [isViewDetailsOpen, setIsViewDetailsOpen] = React.useState(false);
   const [isEditOrderOpen, setIsEditOrderOpen] = React.useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = React.useState(false);
-  const [isAddOrderOpen, setIsAddOrderOpen] = React.useState(false); // ✅ THÊM: Tách riêng add order dialog
   const [selectedItem, setSelectedItem] = React.useState<Order | null>(null);
   const [itemToDelete, setItemToDelete] = React.useState<Order | null>(null);
   const [newStatus, setNewStatus] = React.useState<string>("");
   const [searchTerm, setSearchTerm] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("all");
-
-  // State cho form thêm đơn hàng
-  const [newOrder, setNewOrder] = React.useState({
-    customer: "",
-    customerEmail: "",
-    customerPhone: "",
-    shippingAddress: "",
-    paymentMethod: "",
-    notes: "",
-  });
-  const [orderProducts, setOrderProducts] = React.useState<OrderProduct[]>([]);
 
   // WebSocket states
   const [wsConnected, setWsConnected] = React.useState(false);
@@ -246,54 +214,6 @@ export function OrdersPage() {
     return <Badge variant={config.variant}>{config.label}</Badge>;
   };
 
-  const addProductToOrder = () => {
-    setOrderProducts([
-      ...orderProducts,
-      { productId: "", name: "", price: 0, quantity: 1 },
-    ]);
-  };
-
-  const removeProductFromOrder = (index: number) => {
-    setOrderProducts(orderProducts.filter((_, i) => i !== index));
-  };
-
-  const updateOrderProduct = (index: number, field: string, value: any) => {
-    const updated = [...orderProducts];
-    if (field === "productId") {
-      const product = products.find((p) => p.id === value);
-      if (product) {
-        updated[index] = {
-          ...updated[index],
-          productId: value,
-          name: product.name,
-          price: product.price,
-        };
-      }
-    } else {
-      updated[index] = { ...updated[index], [field]: value };
-    }
-    setOrderProducts(updated);
-  };
-
-  const calculateTotal = () => {
-    return orderProducts.reduce(
-      (total, product) => total + product.price * product.quantity,
-      0
-    );
-  };
-
-  const resetAddOrderForm = () => {
-    setNewOrder({
-      customer: "",
-      customerEmail: "",
-      customerPhone: "",
-      shippingAddress: "",
-      paymentMethod: "",
-      notes: "",
-    });
-    setOrderProducts([]);
-  };
-
   const handleUpdateStatus = async () => {
     if (!selectedItem || !newStatus) {
       alert("Vui lòng chọn trạng thái mới!");
@@ -360,16 +280,7 @@ export function OrdersPage() {
           </h2>
           <p className="text-muted-foreground">Theo dõi và xử lý đơn hàng</p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => setIsAddOrderOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Thêm đơn hàng
-          </Button>
-          <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Xuất báo cáo
-          </Button>
-        </div>
+        {/* ✅ BỎ: Removed buttons */}
       </div>
 
       <div className="flex items-center space-x-2">
@@ -526,275 +437,29 @@ export function OrdersPage() {
         </div>
       )}
 
-      {/* ✅ Dialog thêm đơn hàng mới - Tách riêng */}
-      <Dialog open={isAddOrderOpen} onOpenChange={setIsAddOrderOpen}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Thêm đơn hàng mới</DialogTitle>
-            <DialogDescription>
-              Tạo đơn hàng mới cho khách hàng
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-6 py-4">
-            {/* Thông tin khách hàng */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Thông tin khách hàng</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="customer">Tên khách hàng *</Label>
-                  <Input
-                    id="customer"
-                    value={newOrder.customer}
-                    onChange={(e) =>
-                      setNewOrder({ ...newOrder, customer: e.target.value })
-                    }
-                    placeholder="Nhập tên khách hàng"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="customerEmail">Email *</Label>
-                  <Input
-                    id="customerEmail"
-                    type="email"
-                    value={newOrder.customerEmail}
-                    onChange={(e) =>
-                      setNewOrder({
-                        ...newOrder,
-                        customerEmail: e.target.value,
-                      })
-                    }
-                    placeholder="email@example.com"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="customerPhone">Số điện thoại *</Label>
-                  <Input
-                    id="customerPhone"
-                    value={newOrder.customerPhone}
-                    onChange={(e) =>
-                      setNewOrder({
-                        ...newOrder,
-                        customerPhone: e.target.value,
-                      })
-                    }
-                    placeholder="0987654321"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="paymentMethod">
-                    Phương thức thanh toán *
-                  </Label>
-                  <Select
-                    value={newOrder.paymentMethod}
-                    onValueChange={(value) =>
-                      setNewOrder({ ...newOrder, paymentMethod: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Chọn phương thức" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="VNPay">VNPay</SelectItem>
-                      <SelectItem value="MoMo">MoMo</SelectItem>
-                      <SelectItem value="ZaloPay">ZaloPay</SelectItem>
-                      <SelectItem value="COD">
-                        Thanh toán khi nhận hàng
-                      </SelectItem>
-                      <SelectItem value="Bank Transfer">
-                        Chuyển khoản ngân hàng
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="shippingAddress">Địa chỉ giao hàng *</Label>
-                <Textarea
-                  id="shippingAddress"
-                  value={newOrder.shippingAddress}
-                  onChange={(e) =>
-                    setNewOrder({
-                      ...newOrder,
-                      shippingAddress: e.target.value,
-                    })
-                  }
-                  placeholder="Nhập địa chỉ giao hàng đầy đủ"
-                />
-              </div>
-            </div>
-
-            {/* Sản phẩm */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Sản phẩm đặt hàng</h3>
-                <Button type="button" onClick={addProductToOrder} size="sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Thêm sản phẩm
-                </Button>
-              </div>
-
-              {orderProducts.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground border rounded-lg">
-                  Chưa có sản phẩm nào. Nhấn "Thêm sản phẩm" để bắt đầu.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="border rounded-lg">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[45%]">Sản phẩm</TableHead>
-                          <TableHead className="w-[18%]">Đơn giá</TableHead>
-                          <TableHead className="w-[12%]">SL</TableHead>
-                          <TableHead className="w-[18%]">Thành tiền</TableHead>
-                          <TableHead className="w-[7%]"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {orderProducts.map((product, index) => (
-                          <TableRow key={index}>
-                            <TableCell className="py-3">
-                              <Select
-                                value={product.productId}
-                                onValueChange={(value) =>
-                                  updateOrderProduct(index, "productId", value)
-                                }
-                              >
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Chọn sản phẩm" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {products.map((p) => (
-                                    <SelectItem key={p.id} value={p.id}>
-                                      <div className="flex flex-col">
-                                        <span className="font-medium text-sm">
-                                          {p.name}
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                          {formatCurrency(p.price)}
-                                        </span>
-                                      </div>
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell className="py-3">
-                              <div className="font-medium text-sm">
-                                {product.price > 0
-                                  ? formatCurrency(product.price)
-                                  : "-"}
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-3">
-                              <Input
-                                type="number"
-                                min="1"
-                                value={product.quantity}
-                                onChange={(e) =>
-                                  updateOrderProduct(
-                                    index,
-                                    "quantity",
-                                    parseInt(e.target.value) || 1
-                                  )
-                                }
-                                className="w-16 text-center text-sm"
-                              />
-                            </TableCell>
-                            <TableCell className="py-3">
-                              <div className="font-medium text-sm">
-                                {product.price > 0
-                                  ? formatCurrency(
-                                      product.price * product.quantity
-                                    )
-                                  : "-"}
-                              </div>
-                            </TableCell>
-                            <TableCell className="py-3">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeProductFromOrder(index)}
-                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  <div className="flex justify-end border-t pt-4">
-                    <div className="text-right">
-                      <p className="text-lg font-semibold">
-                        Tổng cộng: {formatCurrency(calculateTotal())}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Ghi chú */}
-            <div className="grid gap-2">
-              <Label htmlFor="notes">Ghi chú</Label>
-              <Textarea
-                id="notes"
-                value={newOrder.notes}
-                onChange={(e) =>
-                  setNewOrder({ ...newOrder, notes: e.target.value })
-                }
-                placeholder="Ghi chú thêm về đơn hàng (không bắt buộc)"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsAddOrderOpen(false);
-                resetAddOrderForm();
-              }}
-            >
-              Hủy
-            </Button>
-            <Button onClick={() => {
-              // Implement create order API call here
-              console.log("Create order:", newOrder, orderProducts);
-              alert("Tính năng tạo đơn hàng sẽ được implement sau!");
-            }}>
-              Tạo đơn hàng
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ✅ Dialog xem chi tiết đơn hàng với tên sản phẩm thật */}
+      {/* ✅ Dialog xem chi tiết đơn hàng - ĐIỀU CHỈNH KẾT THƯỚC PHÙ HỢP VỚI BẢNG */}
       <Dialog open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="min-w-[90vw] max-w-[95vw] w-fit max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Chi tiết đơn hàng {selectedItem?.id}</DialogTitle>
+            <DialogTitle className="text-xl">Chi tiết đơn hàng {selectedItem?.id}</DialogTitle>
           </DialogHeader>
           {selectedItem && (
-            <div className="grid gap-6 py-4">
+            <div className="space-y-8 py-6">
               {/* Thông tin đơn hàng */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Thông tin đơn hàng</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <h3 className="text-lg font-semibold border-b pb-2">Thông tin đơn hàng</h3>
+                <div className="grid grid-cols-3 gap-6">
                   <div>
                     <Label className="text-sm font-medium text-muted-foreground">
                       Mã đơn hàng
                     </Label>
-                    <p className="font-medium">{selectedItem.id}</p>
+                    <p className="font-medium text-lg">{selectedItem.id}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-muted-foreground">
                       Ngày đặt hàng
                     </Label>
-                    <p>{new Date(selectedItem.createdAt).toLocaleDateString('vi-VN', {
+                    <p className="font-medium">{new Date(selectedItem.createdAt).toLocaleDateString('vi-VN', {
                       year: 'numeric',
                       month: '2-digit',
                       day: '2-digit',
@@ -806,54 +471,70 @@ export function OrdersPage() {
                     <Label className="text-sm font-medium text-muted-foreground">
                       Trạng thái
                     </Label>
-                    {getStatusBadge(selectedItem.status)}
+                    <div className="mt-1">
+                      {getStatusBadge(selectedItem.status)}
+                    </div>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-muted-foreground">
                       Phương thức thanh toán
                     </Label>
-                    <Badge variant="outline">
-                      {selectedItem.paymentMethod}
-                    </Badge>
+                    <div className="mt-1">
+                      <Badge variant="outline" className="text-sm">
+                        {selectedItem.paymentMethod}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">
+                      Số sản phẩm
+                    </Label>
+                    <p className="font-medium">{selectedItem.items} sản phẩm</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">
+                      Tổng tiền
+                    </Label>
+                    <p className="font-bold text-lg text-green-600">{formatCurrency(selectedItem.totalAmount)}</p>
                   </div>
                 </div>
               </div>
 
               {/* Thông tin khách hàng */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Thông tin khách hàng</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <h3 className="text-lg font-semibold border-b pb-2">Thông tin khách hàng</h3>
+                <div className="grid grid-cols-2 gap-6">
                   <div>
                     <Label className="text-sm font-medium text-muted-foreground">
                       Tên khách hàng
                     </Label>
-                    <p className="font-medium">{selectedItem.customer}</p>
+                    <p className="font-medium text-lg">{selectedItem.customer}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-muted-foreground">
                       Email
                     </Label>
-                    <p>{selectedItem.email}</p>
+                    <p className="font-medium">{selectedItem.email}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-muted-foreground">
                       Số điện thoại
                     </Label>
-                    <p>{selectedItem.phoneNumber}</p>
+                    <p className="font-medium">{selectedItem.phoneNumber}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-muted-foreground">
                       Địa chỉ giao hàng
                     </Label>
-                    <p>{selectedItem.address}</p>
+                    <p className="font-medium">{selectedItem.address}</p>
                   </div>
                 </div>
               </div>
 
-              {/* ✅ SỬA: Sản phẩm trong đơn hàng với tên thật */}
+              {/* ✅ SỬA: Sản phẩm trong đơn hàng với width tự động phù hợp với nội dung */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Sản phẩm đã đặt</h3>
+                  <h3 className="text-lg font-semibold border-b pb-2 flex-1">Sản phẩm đã đặt</h3>
                   {loadingProducts && (
                     <div className="flex items-center text-sm text-muted-foreground">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
@@ -861,72 +542,81 @@ export function OrdersPage() {
                     </div>
                   )}
                 </div>
-                <div className="border rounded-lg">
-                  <Table>
+                
+                {/* ✅ Bảng với width tự động fit content */}
+                <div className="w-full overflow-x-auto border rounded-lg shadow-sm">
+                  <Table className="w-full">
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>Mã sản phẩm</TableHead>
-                        <TableHead>Tên sản phẩm</TableHead>
-                        <TableHead>Số lượng</TableHead>
-                        <TableHead>Đơn giá</TableHead>
-                        <TableHead>Thành tiền</TableHead>
+                      <TableRow className="bg-gray-50">
+                        <TableHead className="font-semibold whitespace-nowrap min-w-[200px]">Mã sản phẩm</TableHead>
+                        <TableHead className="font-semibold whitespace-nowrap min-w-[300px]">Tên sản phẩm</TableHead>
+                        <TableHead className="font-semibold text-center whitespace-nowrap min-w-[100px]">Số lượng</TableHead>
+                        <TableHead className="font-semibold text-right whitespace-nowrap min-w-[150px]">Đơn giá</TableHead>
+                        <TableHead className="font-semibold text-right whitespace-nowrap min-w-[150px]">Thành tiền</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {selectedItem?.orderDetails &&
                       selectedItem.orderDetails.length > 0 ? (
                         selectedItem.orderDetails.map((detail, index) => (
-                          <TableRow key={detail.id || index}>
-                            <TableCell className="font-medium font-mono text-sm">
+                          <TableRow key={detail.id || index} className="hover:bg-gray-50">
+                            <TableCell className="font-medium font-mono text-sm whitespace-nowrap">
                               {detail.productId}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="min-w-[300px]">
                               <div>
-                                <p className="font-medium">
+                                <p className="font-medium text-base">
                                   {getProductName(detail.productId)}
                                 </p>
                                 {!productsMap[detail.productId] && !loadingProducts && (
-                                  <p className="text-xs text-muted-foreground text-orange-600">
-                                    Chưa tải được thông tin
+                                  <p className="text-xs text-orange-600 mt-1">
+                                    ⚠️ Chưa tải được thông tin sản phẩm
                                   </p>
                                 )}
                                 {loadingProducts && !productsMap[detail.productId] && (
-                                  <p className="text-xs text-muted-foreground">
-                                    Đang tải...
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    📥 Đang tải thông tin...
                                   </p>
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell className="text-center">{detail.quantity}</TableCell>
-                            <TableCell>{formatCurrency(detail.unitPrice)}</TableCell>
-                            <TableCell className="font-medium">{formatCurrency(detail.subTotal)}</TableCell>
+                            <TableCell className="text-center font-medium text-base whitespace-nowrap">{detail.quantity}</TableCell>
+                            <TableCell className="text-right font-medium whitespace-nowrap">{formatCurrency(detail.unitPrice)}</TableCell>
+                            <TableCell className="text-right font-bold text-green-600 whitespace-nowrap">{formatCurrency(detail.subTotal)}</TableCell>
                           </TableRow>
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-4">
-                            Không có sản phẩm nào
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                            Không có sản phẩm nào trong đơn hàng
                           </TableCell>
                         </TableRow>
                       )}
                     </TableBody>
                   </Table>
                 </div>
-                <div className="flex justify-end border-t pt-4">
-                  <div className="text-right">
-                    <p className="text-lg font-semibold">
-                      Tổng cộng: {formatCurrency(selectedItem?.totalAmount || 0)}
-                    </p>
+                
+                {/* Summary section */}
+                <div className="flex justify-end border-t pt-6 mt-6">
+                  <div className="text-right space-y-2">
+                    <div className="flex justify-between items-center min-w-[350px]">
+                      <span className="text-base text-muted-foreground">Số lượng sản phẩm:</span>
+                      <span className="font-medium">{selectedItem.items} sản phẩm</span>
+                    </div>
+                    <div className="flex justify-between items-center min-w-[350px] pt-2 border-t">
+                      <span className="text-lg font-semibold">Tổng cộng:</span>
+                      <span className="text-xl font-bold text-green-600">
+                        {formatCurrency(selectedItem?.totalAmount || 0)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button onClick={() => setIsViewDetailsOpen(false)}>Đóng</Button>
-            <Button>
-              <Download className="mr-2 h-4 w-4" />
-              In hóa đơn
+          <DialogFooter className="pt-6 border-t">
+            <Button onClick={() => setIsViewDetailsOpen(false)} className="px-8">
+              Đóng
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -940,7 +630,7 @@ export function OrdersPage() {
           setNewStatus("");
         }
       }}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Cập nhật trạng thái đơn hàng</DialogTitle>
             <DialogDescription>
