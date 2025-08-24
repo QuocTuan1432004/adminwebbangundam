@@ -10,42 +10,12 @@ import {
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { userApi } from "@/hooks/user/userApi";
 import { AdminAuthService } from "@/hooks/user/userAuth";
 import { getProductCount } from "@/hooks/product/product";
-
-// Mock data for other stats
-const dashboardStats = {
-  totalRevenue: "2,450,000,000",
-  totalOrders: 1234,
-};
-
-const orders = [
-  {
-    id: "ORD001",
-    customer: "Nguyễn Văn A",
-    date: "2024-01-15",
-    total: 1850000,
-    status: "completed",
-    items: 2,
-  },
-  {
-    id: "ORD002",
-    customer: "Trần Thị B",
-    date: "2024-01-14",
-    total: 650000,
-    status: "processing",
-    items: 1,
-  },
-  {
-    id: "ORD003",
-    customer: "Lê Văn C",
-    date: "2024-01-13",
-    total: 3500000,
-    status: "shipped",
-    items: 1,
-  },
-];
+// ✅ THÊM: Import order API
+import { orderApi, getOrdersForAdmin, Order } from "@/hooks/Order/Order";
 
 const products = [
   {
@@ -85,6 +55,19 @@ export function DashboardPage() {
   const [totalProducts, setTotalProducts] = useState<number>(0);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productError, setProductError] = useState("");
+
+  // States cho doanh thu và đơn hàng
+  const [totalRevenue, setTotalRevenue] = useState<number>(0);
+  const [totalOrders, setTotalOrders] = useState<number>(0);
+  const [loadingRevenue, setLoadingRevenue] = useState(true);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [revenueError, setRevenueError] = useState("");
+  const [ordersError, setOrdersError] = useState("");
+
+  // ✅ THÊM: States cho recent orders
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [loadingRecentOrders, setLoadingRecentOrders] = useState(true);
+  const [recentOrdersError, setRecentOrdersError] = useState("");
 
   // Load total customer count from API
   useEffect(() => {
@@ -137,6 +120,89 @@ export function DashboardPage() {
     loadProductCount();
   }, []);
 
+  // Load doanh thu và tổng đơn hàng từ Payment Logs
+  useEffect(() => {
+    const loadRevenueAndOrders = async () => {
+      try {
+        setLoadingRevenue(true);
+        setLoadingOrders(true);
+        setRevenueError("");
+        setOrdersError("");
+        
+        const token = AdminAuthService.getToken();
+        if (!token) {
+          setRevenueError("No authentication token");
+          setOrdersError("No authentication token");
+          return;
+        }
+
+        // Lấy tất cả payment logs đã CONFIRMED để tính doanh thu
+        const paidOrdersResponse = await orderApi.getPaidOrdersForNotifications(token);
+        
+        if (paidOrdersResponse.result && Array.isArray(paidOrdersResponse.result)) {
+          const paidOrders = paidOrdersResponse.result;
+          
+          // Tính tổng doanh thu từ các đơn đã thanh toán
+          const revenue = paidOrders.reduce((total, order) => total + order.totalAmount, 0);
+          setTotalRevenue(revenue);
+          
+          // Tổng số đơn hàng đã thanh toán
+          setTotalOrders(paidOrders.length);
+          
+          console.log(`📊 Dashboard Stats: ${paidOrders.length} orders, ${revenue.toLocaleString('vi-VN')} VND revenue`);
+        } else {
+          setTotalRevenue(0);
+          setTotalOrders(0);
+        }
+      } catch (err) {
+        console.error("Error loading revenue and orders:", err);
+        setRevenueError("Lỗi khi tải doanh thu");
+        setOrdersError("Lỗi khi tải đơn hàng");
+      } finally {
+        setLoadingRevenue(false);
+        setLoadingOrders(false);
+      }
+    };
+
+    loadRevenueAndOrders();
+  }, []);
+
+  // ✅ THÊM: Load recent orders từ API
+  useEffect(() => {
+    const loadRecentOrders = async () => {
+      try {
+        setLoadingRecentOrders(true);
+        setRecentOrdersError("");
+        
+        const token = AdminAuthService.getToken();
+        if (!token) {
+          setRecentOrdersError("No authentication token");
+          return;
+        }
+
+        console.log("🔄 Loading recent orders...");
+        // Lấy 5 đơn hàng mới nhất
+        const response = await getOrdersForAdmin(0, 5);
+        
+        if (response.orders && response.orders.length > 0) {
+          setRecentOrders(response.orders);
+          console.log("✅ Recent orders loaded:", response.orders.length);
+        } else {
+          setRecentOrders([]);
+          console.log("⚠️ No recent orders found");
+        }
+      } catch (err: any) {
+        console.error("❌ Error loading recent orders:", err);
+        setRecentOrdersError("Lỗi khi tải đơn hàng gần đây");
+        setRecentOrders([]);
+      } finally {
+        setLoadingRecentOrders(false);
+      }
+    };
+
+    loadRecentOrders();
+  }, []);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("vi-VN", {
       style: "currency",
@@ -148,6 +214,16 @@ export function DashboardPage() {
     const statusMap = {
       active: { label: "Hoạt động", variant: "default" as const },
       inactive: { label: "Không hoạt động", variant: "secondary" as const },
+      
+      // Order statuses from API
+      PENDING: { label: "Chờ xử lý", variant: "secondary" as const },
+      CONFIRMED: { label: "Đã xác nhận", variant: "default" as const },
+      PROCESSING: { label: "Đang xử lý", variant: "secondary" as const },
+      SHIPPED: { label: "Đã giao", variant: "outline" as const },
+      DELIVERED: { label: "Hoàn thành", variant: "default" as const },
+      CANCELLED: { label: "Đã hủy", variant: "destructive" as const },
+      
+      // Legacy statuses
       completed: { label: "Hoàn thành", variant: "default" as const },
       processing: { label: "Đang xử lý", variant: "secondary" as const },
       shipped: { label: "Đã giao", variant: "outline" as const },
@@ -180,6 +256,7 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Revenue Card với API thật */}
         <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-600">
@@ -191,15 +268,32 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">
-              {formatCurrency(Number.parseInt(dashboardStats.totalRevenue))}
+              {loadingRevenue ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600 mr-2"></div>
+                  Loading...
+                </div>
+              ) : revenueError ? (
+                <span className="text-red-500 text-sm">Error</span>
+              ) : (
+                formatCurrency(totalRevenue)
+              )}
             </div>
-            <div className="flex items-center text-xs text-green-600 mt-1">
-              <TrendingUp className="h-3 w-3 mr-1" />
-              +20.1% so với tháng trước
-            </div>
+            {!loadingRevenue && !revenueError && (
+              <div className="flex items-center text-xs text-green-600 mt-1">
+                <TrendingUp className="h-3 w-3 mr-1" />
+                Từ đơn hàng đã thanh toán
+              </div>
+            )}
+            {revenueError && (
+              <div className="flex items-center text-xs text-red-500 mt-1">
+                {revenueError}
+              </div>
+            )}
           </CardContent>
         </Card>
 
+        {/* Orders Card với API thật */}
         <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-600">
@@ -211,16 +305,32 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-slate-900">
-              {dashboardStats.totalOrders}
+              {loadingOrders ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                  Loading...
+                </div>
+              ) : ordersError ? (
+                <span className="text-red-500 text-sm">Error</span>
+              ) : (
+                totalOrders.toLocaleString('vi-VN')
+              )}
             </div>
-            <div className="flex items-center text-xs text-green-600 mt-1">
-              <TrendingUp className="h-3 w-3 mr-1" />
-              +15% so với tháng trước
-            </div>
+            {!loadingOrders && !ordersError && (
+              <div className="flex items-center text-xs text-green-600 mt-1">
+                <TrendingUp className="h-3 w-3 mr-1" />
+                Đơn hàng đã thanh toán
+              </div>
+            )}
+            {ordersError && (
+              <div className="flex items-center text-xs text-red-500 mt-1">
+                {ordersError}
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Updated Product Count Card */}
+        {/* Product Count Card */}
         <Card className="border-slate-200 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-slate-600">
@@ -243,7 +353,6 @@ export function DashboardPage() {
                 totalProducts.toLocaleString('vi-VN')
               )}
             </div>
-            {/* ❌ BỎ: "Dữ liệu thực từ API" text */}
             {!loadingProducts && !productError && (
               <div className="flex items-center text-xs text-green-600 mt-1">
                 <TrendingUp className="h-3 w-3 mr-1" />
@@ -281,11 +390,10 @@ export function DashboardPage() {
                 totalCustomers.toLocaleString('vi-VN')
               )}
             </div>
-            {/* ❌ BỎ: "Dữ liệu thực từ API" text */}
             {!loadingCustomers && !customerError && (
               <div className="flex items-center text-xs text-green-600 mt-1">
                 <TrendingUp className="h-3 w-3 mr-1" />
-                Dữ liệu thực từ API
+                +3 khách hàng mới
               </div>
             )}
             {customerError && (
@@ -297,35 +405,82 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      {/* Rest of the dashboard remains the same */}
+      {/* ✅ SỬA: Bottom section với API thật */}
       <div className="grid gap-4 md:grid-cols-2">
+        {/* ✅ Recent Orders Card với API thật */}
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="border-b border-slate-100">
             <CardTitle className="text-slate-900">Đơn hàng gần đây</CardTitle>
           </CardHeader>
           <CardContent className="pt-6">
-            <div className="space-y-4">
-              {orders.slice(0, 3).map((order) => (
-                <div
-                  key={order.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100"
+            {loadingRecentOrders ? (
+              <div className="flex items-center justify-center py-6">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
+                <span className="text-sm text-muted-foreground">Đang tải đơn hàng...</span>
+              </div>
+            ) : recentOrdersError ? (
+              <div className="text-center py-6">
+                <p className="text-red-500 text-sm">{recentOrdersError}</p>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => window.location.reload()}
+                  className="mt-2"
                 >
-                  <div>
-                    <p className="font-medium text-slate-900">{order.id}</p>
-                    <p className="text-sm text-slate-600">{order.customer}</p>
+                  Thử lại
+                </Button>
+              </div>
+            ) : recentOrders.length === 0 ? (
+              <div className="text-center py-6">
+                <p className="text-muted-foreground text-sm">Chưa có đơn hàng nào</p>
+                <p className="text-xs text-muted-foreground mt-1">Đơn hàng sẽ xuất hiện khi có khách hàng đặt mua</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {recentOrders.slice(0, 3).map((order) => (
+                  <div
+                    key={order.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-100 hover:bg-slate-100 transition-colors"
+                  >
+                    <div>
+                      <p className="font-medium text-slate-900">{order.id}</p>
+                      <p className="text-sm text-slate-600">{order.customer}</p>
+                      <p className="text-xs text-slate-500">
+                        {new Date(order.createdAt).toLocaleDateString('vi-VN', {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium text-slate-900">
+                        {formatCurrency(order.totalAmount)}
+                      </p>
+                      {getStatusBadge(order.status)}
+                      <p className="text-xs text-slate-500 mt-1">
+                        {order.items} sản phẩm
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium text-slate-900">
-                      {formatCurrency(order.total)}
+                ))}
+                
+                {/* Show more link if we have more orders */}
+                {recentOrders.length > 3 && (
+                  <div className="text-center pt-2 border-t border-slate-200">
+                    <p className="text-xs text-slate-500">
+                      Và {recentOrders.length - 3} đơn hàng khác...
                     </p>
-                    {getStatusBadge(order.status)}
                   </div>
-                </div>
-              ))}
-            </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
+        {/* Products Card - Mock data */}
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="border-b border-slate-100">
             <CardTitle className="text-slate-900">Sản phẩm bán chạy</CardTitle>

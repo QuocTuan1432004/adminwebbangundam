@@ -52,9 +52,11 @@ import {
   adminCancelOrder,
   Order,
 } from "../hooks/Order/Order";
+// ✅ THÊM: Import product API
+import { getProductsByIds, Product } from "@/hooks/product/product";
 import { webSocketService } from "@/lib/websocket";
 
-// Mock data cho sản phẩm
+// Mock data cho sản phẩm (giữ lại cho add order form)
 const products = [
   { id: "P001", name: "RG RX-78-2 Gundam", price: 650000, stock: 15 },
   { id: "P002", name: "MG Strike Freedom", price: 1200000, stock: 8 },
@@ -71,20 +73,25 @@ interface OrderProduct {
 }
 
 export function OrdersPage() {
-  // Xóa mockData, sử dụng state rỗng
+  // States cho orders
   const [orders, setOrders] = React.useState<Order[]>([]);
   const [loading, setLoading] = React.useState(false);
 
-  // Thêm state cho phân trang
+  // ✅ THÊM: States cho products cache
+  const [productsMap, setProductsMap] = React.useState<{ [key: string]: Product }>({});
+  const [loadingProducts, setLoadingProducts] = React.useState(false);
+
+  // States cho phân trang
   const [currentPage, setCurrentPage] = React.useState(0);
   const [pageSize] = React.useState(10);
   const [totalPages, setTotalPages] = React.useState(0);
   const [totalElements, setTotalElements] = React.useState(0);
 
-  // State khác
+  // State dialogs
   const [isViewDetailsOpen, setIsViewDetailsOpen] = React.useState(false);
   const [isEditOrderOpen, setIsEditOrderOpen] = React.useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = React.useState(false);
+  const [isAddOrderOpen, setIsAddOrderOpen] = React.useState(false); // ✅ THÊM: Tách riêng add order dialog
   const [selectedItem, setSelectedItem] = React.useState<Order | null>(null);
   const [itemToDelete, setItemToDelete] = React.useState<Order | null>(null);
   const [newStatus, setNewStatus] = React.useState<string>("");
@@ -105,19 +112,31 @@ export function OrdersPage() {
   // WebSocket states
   const [wsConnected, setWsConnected] = React.useState(false);
 
-  // Fetch data với phân trang
+  // ✅ THÊM: Function để lấy tên sản phẩm
+  const getProductName = (productId: string): string => {
+    const product = productsMap[productId];
+    return product ? product.productName : `Sản phẩm ${productId}`;
+  };
+
+  // ✅ THÊM: Function để lấy giá sản phẩm
+  const getProductPrice = (productId: string): number => {
+    const product = productsMap[productId];
+    return product ? product.price : 0;
+  };
+
+  // Fetch orders data với phân trang
   React.useEffect(() => {
     const fetchOrders = async () => {
       setLoading(true);
       try {
         const data = await getOrdersForAdmin(currentPage, pageSize);
-        console.log("Paginated data:", data);
+        console.log("📦 Orders data:", data);
 
         setOrders(data.orders);
         setTotalElements(data.totalElements);
         setTotalPages(data.totalPages);
       } catch (error) {
-        console.error("Error fetching orders:", error);
+        console.error("❌ Error fetching orders:", error);
         alert("Không thể tải danh sách đơn hàng!");
       } finally {
         setLoading(false);
@@ -125,6 +144,47 @@ export function OrdersPage() {
     };
     fetchOrders();
   }, [currentPage, pageSize]);
+
+  // ✅ THÊM: Load product details khi orders thay đổi
+  React.useEffect(() => {
+    const loadProductDetails = async () => {
+      if (orders.length === 0) return;
+
+      setLoadingProducts(true);
+      try {
+        // Collect tất cả product IDs từ orders
+        const allProductIds = new Set<string>();
+        orders.forEach(order => {
+          order.orderDetails?.forEach(detail => {
+            if (detail.productId && !productsMap[detail.productId]) {
+              allProductIds.add(detail.productId);
+            }
+          });
+        });
+
+        const productIdsArray = Array.from(allProductIds);
+        
+        if (productIdsArray.length > 0) {
+          console.log("🔄 Loading product details for:", productIdsArray);
+          const newProductsMap = await getProductsByIds(productIdsArray);
+          
+          // Merge với existing products map
+          setProductsMap(prev => ({
+            ...prev,
+            ...newProductsMap
+          }));
+          
+          console.log("✅ Product details loaded:", Object.keys(newProductsMap).length);
+        }
+      } catch (error) {
+        console.error("❌ Error loading product details:", error);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+
+    loadProductDetails();
+  }, [orders, productsMap]);
 
   // Kết nối WebSocket khi component mount
   React.useEffect(() => {
@@ -154,12 +214,12 @@ export function OrdersPage() {
 
     return matchesSearch && matchesStatus;
   });
+
   // Reset page khi search/filter thay đổi
   React.useEffect(() => {
     setCurrentPage(0);
   }, [searchTerm, statusFilter]);
 
-  // Thêm function này vào component
   const formatCurrency = (amount: number): string => {
     if (!amount || isNaN(amount) || amount === 0) {
       return "0 ₫";
@@ -174,6 +234,8 @@ export function OrdersPage() {
       PENDING: { label: "Chờ xử lý", variant: "outline" as const },
       SHIPPED: { label: "Đã giao", variant: "default" as const },
       CANCELLED: { label: "Đã hủy", variant: "destructive" as const },
+      CONFIRMED: { label: "Đã xác nhận", variant: "default" as const },
+      DELIVERED: { label: "Đã giao", variant: "default" as const },
     };
 
     const config = statusMap[status as keyof typeof statusMap] || {
@@ -232,34 +294,6 @@ export function OrdersPage() {
     setOrderProducts([]);
   };
 
-  // const handleAddOrder = () => {
-  //   if (
-  //     !newOrder.customer ||
-  //     !newOrder.customerEmail ||
-  //     !newOrder.customerPhone ||
-  //     !newOrder.shippingAddress ||
-  //     !newOrder.paymentMethod ||
-  //     orderProducts.length === 0
-  //   ) {
-  //     alert("Vui lòng điền đầy đủ thông tin và thêm ít nhất một sản phẩm!");
-  //     return;
-  //   }
-
-  //   const orderData = {
-  //     ...newOrder,
-  //     products: orderProducts,
-  //     total: calculateTotal(),
-  //     items: orderProducts.length,
-  //     date: new Date().toISOString().split("T")[0],
-  //     status: "processing",
-  //     id: `ORD${String(orders.length + 1).padStart(3, "0")}`,
-  //   };
-
-  //   console.log("Thêm đơn hàng mới:", orderData);
-  //   setIsEditOrderOpen(false);
-  //   resetAddOrderForm();
-  // };
-
   const handleUpdateStatus = async () => {
     if (!selectedItem || !newStatus) {
       alert("Vui lòng chọn trạng thái mới!");
@@ -317,10 +351,6 @@ export function OrdersPage() {
     }
   };
 
-  function handleDeleteOrder(event: React.MouseEvent<HTMLButtonElement>): void {
-    throw new Error("Function not implemented.");
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -330,8 +360,8 @@ export function OrdersPage() {
           </h2>
           <p className="text-muted-foreground">Theo dõi và xử lý đơn hàng</p>
         </div>
-        {/* <div className="flex gap-2">
-          <Button onClick={() => setIsEditOrderOpen(true)}>
+        <div className="flex gap-2">
+          <Button onClick={() => setIsAddOrderOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Thêm đơn hàng
           </Button>
@@ -339,7 +369,7 @@ export function OrdersPage() {
             <Download className="mr-2 h-4 w-4" />
             Xuất báo cáo
           </Button>
-        </div> */}
+        </div>
       </div>
 
       <div className="flex items-center space-x-2">
@@ -347,7 +377,7 @@ export function OrdersPage() {
           placeholder="Tìm kiếm đơn hàng..."
           className="max-w-sm"
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)} // Cập nhật searchTerm
+          onChange={(e) => setSearchTerm(e.target.value)}
         />
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[180px]">
@@ -362,6 +392,12 @@ export function OrdersPage() {
             <SelectItem value="CANCELLED">Đã hủy</SelectItem>
           </SelectContent>
         </Select>
+        {loadingProducts && (
+          <div className="flex items-center text-sm text-muted-foreground">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+            Đang tải thông tin sản phẩm...
+          </div>
+        )}
       </div>
 
       <Card>
@@ -379,9 +415,18 @@ export function OrdersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredOrders.length === 0 ? (
+              {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center h-24">
+                  <TableCell colSpan={7} className="text-center h-24">
+                    <div className="flex items-center justify-center">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
+                      Đang tải đơn hàng...
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : filteredOrders.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center h-24">
                     Không có đơn hàng nào
                   </TableCell>
                 </TableRow>
@@ -454,7 +499,7 @@ export function OrdersPage() {
         </CardContent>
       </Card>
 
-      {/* Simple Pagination */}
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center space-x-4 mt-6 py-4">
           <Button
@@ -481,8 +526,8 @@ export function OrdersPage() {
         </div>
       )}
 
-      {/* Dialog thêm đơn hàng mới - WIDER */}
-      <Dialog open={isEditOrderOpen} onOpenChange={setIsEditOrderOpen}>
+      {/* ✅ Dialog thêm đơn hàng mới - Tách riêng */}
+      <Dialog open={isAddOrderOpen} onOpenChange={setIsAddOrderOpen}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Thêm đơn hàng mới</DialogTitle>
@@ -710,27 +755,29 @@ export function OrdersPage() {
             <Button
               variant="outline"
               onClick={() => {
-                setIsEditOrderOpen(false);
+                setIsAddOrderOpen(false);
                 resetAddOrderForm();
               }}
             >
               Hủy
             </Button>
-            {/* <Button onClick={handleAddOrder}>Tạo đơn hàng</Button> */}
+            <Button onClick={() => {
+              // Implement create order API call here
+              console.log("Create order:", newOrder, orderProducts);
+              alert("Tính năng tạo đơn hàng sẽ được implement sau!");
+            }}>
+              Tạo đơn hàng
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Dialog xem chi tiết đơn hàng */}
+      {/* ✅ Dialog xem chi tiết đơn hàng với tên sản phẩm thật */}
       <Dialog open={isViewDetailsOpen} onOpenChange={setIsViewDetailsOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogTitle>
-            Chi tiết đơn hàng{" "}
-            {selectedItem?.orderDetails
-              ?.slice(1)
-              .map((detail) => detail.id)
-              .join(", ")}
-          </DialogTitle>
+          <DialogHeader>
+            <DialogTitle>Chi tiết đơn hàng {selectedItem?.id}</DialogTitle>
+          </DialogHeader>
           {selectedItem && (
             <div className="grid gap-6 py-4">
               {/* Thông tin đơn hàng */}
@@ -747,7 +794,13 @@ export function OrdersPage() {
                     <Label className="text-sm font-medium text-muted-foreground">
                       Ngày đặt hàng
                     </Label>
-                    <p>{selectedItem.createdAt}</p>
+                    <p>{new Date(selectedItem.createdAt).toLocaleDateString('vi-VN', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-muted-foreground">
@@ -797,14 +850,23 @@ export function OrdersPage() {
                 </div>
               </div>
 
-              {/* Sản phẩm trong đơn hàng */}
+              {/* ✅ SỬA: Sản phẩm trong đơn hàng với tên thật */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Sản phẩm đã đặt</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Sản phẩm đã đặt</h3>
+                  {loadingProducts && (
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                      Đang tải thông tin sản phẩm...
+                    </div>
+                  )}
+                </div>
                 <div className="border rounded-lg">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Mã sản phẩm</TableHead>
+                        <TableHead>Tên sản phẩm</TableHead>
                         <TableHead>Số lượng</TableHead>
                         <TableHead>Đơn giá</TableHead>
                         <TableHead>Thành tiền</TableHead>
@@ -815,21 +877,34 @@ export function OrdersPage() {
                       selectedItem.orderDetails.length > 0 ? (
                         selectedItem.orderDetails.map((detail, index) => (
                           <TableRow key={detail.id || index}>
-                            <TableCell className="font-medium">
+                            <TableCell className="font-medium font-mono text-sm">
                               {detail.productId}
                             </TableCell>
-                            <TableCell>{detail.quantity}</TableCell>
                             <TableCell>
-                              {formatCurrency(detail.unitPrice)}
+                              <div>
+                                <p className="font-medium">
+                                  {getProductName(detail.productId)}
+                                </p>
+                                {!productsMap[detail.productId] && !loadingProducts && (
+                                  <p className="text-xs text-muted-foreground text-orange-600">
+                                    Chưa tải được thông tin
+                                  </p>
+                                )}
+                                {loadingProducts && !productsMap[detail.productId] && (
+                                  <p className="text-xs text-muted-foreground">
+                                    Đang tải...
+                                  </p>
+                                )}
+                              </div>
                             </TableCell>
-                            <TableCell>
-                              {formatCurrency(detail.subTotal)}
-                            </TableCell>
+                            <TableCell className="text-center">{detail.quantity}</TableCell>
+                            <TableCell>{formatCurrency(detail.unitPrice)}</TableCell>
+                            <TableCell className="font-medium">{formatCurrency(detail.subTotal)}</TableCell>
                           </TableRow>
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={4} className="text-center py-4">
+                          <TableCell colSpan={5} className="text-center py-4">
                             Không có sản phẩm nào
                           </TableCell>
                         </TableRow>
@@ -837,23 +912,14 @@ export function OrdersPage() {
                     </TableBody>
                   </Table>
                 </div>
-                <div className="flex justify-end">
+                <div className="flex justify-end border-t pt-4">
                   <div className="text-right">
                     <p className="text-lg font-semibold">
-                      Tổng cộng:{" "}
-                      {formatCurrency(selectedItem?.totalAmount || 0)}
+                      Tổng cộng: {formatCurrency(selectedItem?.totalAmount || 0)}
                     </p>
                   </div>
                 </div>
               </div>
-
-              {/* Ghi chú */}
-              {selectedItem.notes && (
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold">Ghi chú</h3>
-                  <p className="text-muted-foreground">{selectedItem.notes}</p>
-                </div>
-              )}
             </div>
           )}
           <DialogFooter>
@@ -866,8 +932,14 @@ export function OrdersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog cập nhật trạng thái đơn hàng */}
-      <Dialog open={isEditOrderOpen} onOpenChange={setIsEditOrderOpen}>
+      {/* ✅ Dialog cập nhật trạng thái - Tách riêng */}
+      <Dialog open={isEditOrderOpen && selectedItem !== null} onOpenChange={(open) => {
+        if (!open) {
+          setIsEditOrderOpen(false);
+          setSelectedItem(null);
+          setNewStatus("");
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cập nhật trạng thái đơn hàng</DialogTitle>
@@ -903,16 +975,13 @@ export function OrdersPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="order-note">Ghi chú cập nhật</Label>
-              <Textarea
-                id="order-note"
-                placeholder="Ghi chú về việc cập nhật trạng thái..."
-              />
-            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditOrderOpen(false)}>
+            <Button variant="outline" onClick={() => {
+              setIsEditOrderOpen(false);
+              setSelectedItem(null);
+              setNewStatus("");
+            }}>
               Hủy
             </Button>
             <Button type="submit" onClick={handleUpdateStatus}>
@@ -947,7 +1016,4 @@ export function OrdersPage() {
       </Dialog>
     </div>
   );
-}
-function setOrderNote(arg0: string) {
-  throw new Error("Function not implemented.");
 }

@@ -188,3 +188,59 @@ export const getProductCount = async (): Promise<number> => {
     throw error;
   }
 };
+// ...existing code...
+
+export const getProductById = async (productId: string): Promise<Product> => {
+  try {
+    const response = await authenticatedFetch(`${API_BASE_URL}/product/getByProductId/${productId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    const result = await handleResponse(response);
+    // Backend trả về ProductResponse trong result
+    return result.result;
+  } catch (error) {
+    console.error('Error getting product by ID:', error);
+    throw error;
+  }
+};
+
+// ✅ THÊM: Lấy nhiều sản phẩm song song với error handling
+export const getProductsByIds = async (productIds: string[]): Promise<{ [key: string]: Product }> => {
+  try {
+    if (productIds.length === 0) return {};
+
+    console.log("🔄 Loading products for IDs:", productIds);
+
+    // Load song song tất cả products
+    const promises = productIds.map(async (id) => {
+      try {
+        const product = await getProductById(id);
+        return { id, product };
+      } catch (error) {
+        console.warn(`⚠️ Failed to load product ${id}:`, error);
+        return { id, product: null };
+      }
+    });
+    
+    const results = await Promise.allSettled(promises);
+    
+    // Tạo map từ results
+    const productsMap: { [key: string]: Product } = {};
+    
+    results.forEach((result) => {
+      if (result.status === 'fulfilled' && result.value.product) {
+        productsMap[result.value.id] = result.value.product;
+      }
+    });
+    
+    console.log("✅ Loaded products:", Object.keys(productsMap).length);
+    return productsMap;
+  } catch (error) {
+    console.error('❌ Error getting products by IDs:', error);
+    return {};
+  }
+};
